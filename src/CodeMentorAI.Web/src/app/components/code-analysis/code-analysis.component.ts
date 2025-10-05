@@ -81,6 +81,10 @@ interface AnalysisResult {
                 <input type="radio" name="analysisFocus" value="refactoring" [(ngModel)]="selectedFocus" />
                 <span class="radio-text">🔧 Refactoring Suggestions</span>
               </label>
+              <label class="radio-label">
+                <input type="radio" name="analysisFocus" value="explain" [(ngModel)]="selectedFocus" />
+                <span class="radio-text">📖 Explain the Code</span>
+              </label>
             </div>
           </div>
           
@@ -556,39 +560,70 @@ export class CodeAnalysisComponent implements OnDestroy {
       console.log(`🎯 Focus: ${this.selectedFocus}`);
       console.log(`📄 Code length: ${this.codeInput.length} characters`);
 
-      // Convert single focus to options object
-      const options = {
-        codeQuality: this.selectedFocus === 'codeQuality',
-        performance: this.selectedFocus === 'performance',
-        security: this.selectedFocus === 'security',
-        bugs: this.selectedFocus === 'bugs',
-        refactoring: this.selectedFocus === 'refactoring'
-      };
+      // Handle "Explain the code" option differently
+      if (this.selectedFocus === 'explain') {
+        // For explain mode, send directly to chat/Ollama with explanation prompt
+        const explainPrompt = `Please explain the following ${this.selectedLanguage} code in detail. Break down what it does, how it works, and any important concepts:\n\n${this.codeInput}`;
 
-      // Call the backend API with real Ollama model using RxJS for better performance
-      const response = await this.http.post<AnalysisResult>('http://localhost:5000/api/codeanalysis', {
-        code: this.codeInput,
-        language: this.selectedLanguage,
-        options: options
-      }).pipe(
-        takeUntil(this.destroy$)
-      ).toPromise();
+        const response = await this.http.post<any>('http://localhost:5000/api/chat', {
+          message: explainPrompt,
+          model: 'llama3.2:latest' // Use current model
+        }).pipe(
+          takeUntil(this.destroy$)
+        ).toPromise();
 
-      if (response) {
-        this.analysisResult = response;
+        if (response) {
+          // Format the explanation as an analysis result
+          this.analysisResult = {
+            summary: '📖 Code Explanation',
+            details: response.response || response.message || 'Explanation generated.',
+            suggestions: [],
+            language: this.selectedLanguage,
+            modelUsed: response.model || 'llama3.2:latest'
+          };
 
-        // Cache the result (limit cache size to prevent memory leaks)
-        if (this.analysisCache.size >= 50) {
-          const firstKey = this.analysisCache.keys().next().value;
-          this.analysisCache.delete(firstKey);
+          // Cache the result
+          if (this.analysisCache.size >= 50) {
+            const firstKey = this.analysisCache.keys().next().value;
+            this.analysisCache.delete(firstKey);
+          }
+          this.analysisCache.set(cacheKey, this.analysisResult);
         }
-        this.analysisCache.set(cacheKey, response);
-
-        console.log('✅ Analysis completed successfully with model:', response.modelUsed);
-        console.log('📊 Quality Score:', response.codeQuality);
-        console.log('💡 Suggestions:', response.suggestions.length);
       } else {
-        throw new Error('No response received from backend');
+        // Convert single focus to options object for regular analysis
+        const options = {
+          codeQuality: this.selectedFocus === 'codeQuality',
+          performance: this.selectedFocus === 'performance',
+          security: this.selectedFocus === 'security',
+          bugs: this.selectedFocus === 'bugs',
+          refactoring: this.selectedFocus === 'refactoring'
+        };
+
+        // Call the backend API with real Ollama model using RxJS for better performance
+        const response = await this.http.post<AnalysisResult>('http://localhost:5000/api/codeanalysis', {
+          code: this.codeInput,
+          language: this.selectedLanguage,
+          options: options
+        }).pipe(
+          takeUntil(this.destroy$)
+        ).toPromise();
+
+        if (response) {
+          this.analysisResult = response;
+
+          // Cache the result (limit cache size to prevent memory leaks)
+          if (this.analysisCache.size >= 50) {
+            const firstKey = this.analysisCache.keys().next().value;
+            this.analysisCache.delete(firstKey);
+          }
+          this.analysisCache.set(cacheKey, response);
+
+          console.log('✅ Analysis completed successfully with model:', response.modelUsed);
+          console.log('📊 Quality Score:', response.codeQuality);
+          console.log('💡 Suggestions:', response.suggestions.length);
+        } else {
+          throw new Error('No response received from backend');
+        }
       }
 
     } catch (error) {
