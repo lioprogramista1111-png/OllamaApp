@@ -1,14 +1,16 @@
-import { Component, OnDestroy, ChangeDetectionStrategy, inject } from '@angular/core';
+import { Component, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpClientModule } from '@angular/common/http';
 import { Subject, takeUntil, debounceTime, distinctUntilChanged } from 'rxjs';
 
 interface AnalysisResult {
-  feedback: string;
+  feedback?: string;
+  summary?: string;
+  details?: string;
   suggestions: string[];
-  codeQuality: number;
-  timestamp: Date;
+  codeQuality?: number;
+  timestamp?: Date;
   language?: string;
   modelUsed?: string;
   detectedLanguage?: string;
@@ -131,19 +133,26 @@ interface AnalysisResult {
               </div>
             </div>
 
-            <div class="feedback-section">
+            <!-- For Explain mode -->
+            <div class="feedback-section" *ngIf="analysisResult.summary">
+              <h4>{{ analysisResult.summary }}</h4>
+              <div class="feedback-content">{{ analysisResult.details }}</div>
+            </div>
+
+            <!-- For regular analysis mode -->
+            <div class="feedback-section" *ngIf="analysisResult.feedback">
               <h4>💬 AI Feedback</h4>
               <div class="feedback-content">{{ analysisResult.feedback }}</div>
             </div>
-            
-            <div class="suggestions-section" *ngIf="analysisResult.suggestions.length > 0">
+
+            <div class="suggestions-section" *ngIf="analysisResult.suggestions && analysisResult.suggestions.length > 0">
               <h4>💡 Suggestions</h4>
               <ul class="suggestions-list">
                 <li *ngFor="let suggestion of analysisResult.suggestions">{{ suggestion }}</li>
               </ul>
             </div>
-            
-            <div class="quality-score" *ngIf="analysisResult.codeQuality > 0">
+
+            <div class="quality-score" *ngIf="analysisResult.codeQuality && analysisResult.codeQuality > 0">
               <h4>⭐ Code Quality Score</h4>
               <div class="score-display">
                 <div class="score-bar">
@@ -523,6 +532,7 @@ interface AnalysisResult {
 })
 export class CodeAnalysisComponent implements OnDestroy {
   private readonly http = inject(HttpClient);
+  private readonly cdr = inject(ChangeDetectorRef);
   private readonly destroy$ = new Subject<void>();
   private readonly analysisCache = new Map<string, AnalysisResult>();
 
@@ -548,11 +558,13 @@ export class CodeAnalysisComponent implements OnDestroy {
     if (this.analysisCache.has(cacheKey)) {
       console.log('🚀 Cache hit! Using cached analysis result');
       this.analysisResult = this.analysisCache.get(cacheKey)!;
+      this.cdr.markForCheck();
       return;
     }
 
     this.isAnalyzing = true;
     this.analysisResult = null;
+    this.cdr.markForCheck();
 
     try {
       console.log('🔍 Starting code analysis...');
@@ -588,6 +600,7 @@ export class CodeAnalysisComponent implements OnDestroy {
             this.analysisCache.delete(firstKey);
           }
           this.analysisCache.set(cacheKey, this.analysisResult);
+          this.cdr.markForCheck();
         }
       } else {
         // Convert single focus to options object for regular analysis
@@ -621,6 +634,7 @@ export class CodeAnalysisComponent implements OnDestroy {
           console.log('✅ Analysis completed successfully with model:', response.modelUsed);
           console.log('📊 Quality Score:', response.codeQuality);
           console.log('💡 Suggestions:', response.suggestions.length);
+          this.cdr.markForCheck();
         } else {
           throw new Error('No response received from backend');
         }
@@ -643,9 +657,11 @@ export class CodeAnalysisComponent implements OnDestroy {
         language: this.selectedLanguage,
         modelUsed: 'Error - No Model Available'
       };
+      this.cdr.markForCheck();
     }
-    
+
     this.isAnalyzing = false;
+    this.cdr.markForCheck();
   }
 
 
