@@ -65,10 +65,13 @@ public class CodeAnalysisController : ControllerBase
 
             _logger.LogInformation("🎯 SINGLE FOCUS SELECTED: {Focus}", selectedFocus);
 
-            // Get the best model for code analysis (with caching)
-            var bestModel = await GetBestModelCached();
+            // Use the model specified in the request, or get the best model for code analysis
+            var bestModel = !string.IsNullOrEmpty(request.Model)
+                ? request.Model
+                : await GetBestModelCached();
 
-            _logger.LogInformation("Using model {Model} for code analysis", bestModel);
+            _logger.LogInformation("Using model {Model} for code analysis (User specified: {UserSpecified})",
+                bestModel, !string.IsNullOrEmpty(request.Model));
 
             // First, detect the programming language
             var detectedLanguage = await DetectProgrammingLanguage(request.Code, bestModel);
@@ -650,6 +653,7 @@ public class CodeAnalysisRequest
 {
     public string Code { get; set; } = string.Empty;
     public string Language { get; set; } = string.Empty;
+    public string? Model { get; set; } // Optional: specific model to use for analysis
     public AnalysisOptions Options { get; set; } = new();
 }
 

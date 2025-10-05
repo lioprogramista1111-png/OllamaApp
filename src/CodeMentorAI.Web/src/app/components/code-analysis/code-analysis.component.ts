@@ -1,8 +1,10 @@
-import { Component, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient, HttpClientModule } from '@angular/common/http';
 import { Subject, takeUntil, debounceTime, distinctUntilChanged } from 'rxjs';
+import { ModelService } from '../../services/model.service';
+import { ModelFormatterService } from '../../services/model-formatter.service';
 
 interface AnalysisResult {
   feedback?: string;
@@ -15,6 +17,12 @@ interface AnalysisResult {
   modelUsed?: string;
   detectedLanguage?: string;
   languageMismatch?: boolean;
+}
+
+interface AvailableModel {
+  name: string;
+  displayName: string;
+  size: string;
 }
 
 @Component({
@@ -32,8 +40,14 @@ interface AnalysisResult {
       <div class="analysis-section">
         <div class="input-section">
           <div class="input-header">
-            <h3>📝 Your Code</h3>
-            <p class="auto-detect-hint">Language will be automatically detected</p>
+            <div class="header-left">
+              <h3>📝 Your Code</h3>
+              <p class="auto-detect-hint">Language will be automatically detected</p>
+            </div>
+            <div class="model-info-badge">
+              <span class="model-icon">🤖</span>
+              <span class="model-name">{{ currentModelDisplayName }}</span>
+            </div>
           </div>
           
           <div class="textarea-wrapper">
@@ -199,10 +213,18 @@ interface AnalysisResult {
     }
 
     .input-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
       margin-bottom: 16px;
+      gap: 16px;
     }
 
-    .input-header h3 {
+    .header-left {
+      flex: 1;
+    }
+
+    .header-left h3 {
       margin: 0 0 4px 0;
       color: #333;
     }
@@ -212,6 +234,28 @@ interface AnalysisResult {
       color: #666;
       font-size: 13px;
       font-style: italic;
+    }
+
+    .model-info-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 20px;
+      box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+      white-space: nowrap;
+    }
+
+    .model-icon {
+      font-size: 16px;
+    }
+
+    .model-name {
+      color: white;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
     }
 
     .language-info {
@@ -482,21 +526,137 @@ interface AnalysisResult {
     }
   `]
 })
-export class CodeAnalysisComponent implements OnDestroy {
+export class CodeAnalysisComponent implements OnInit, OnDestroy {
   private readonly http = inject(HttpClient);
   private readonly cdr = inject(ChangeDetectorRef);
+  private readonly modelService = inject(ModelService);
+  private readonly modelFormatter = inject(ModelFormatterService);
   private readonly destroy$ = new Subject<void>();
   private readonly analysisCache = new Map<string, AnalysisResult>();
+  private modelChangeListener: any;
 
   codeInput = '';
   isAnalyzing = false;
   analysisResult: AnalysisResult | null = null;
 
   selectedFocus: string = 'codeQuality'; // Default to code quality
+  selectedModel = 'codellama:latest'; // Default to CodeLlama for code analysis
+  currentModelDisplayName = 'CodeLlama';
+  availableModels: AvailableModel[] = [
+    { name: 'codellama:latest', displayName: 'CodeLlama', size: '3.8 GB' },
+    { name: 'llama3.2:latest', displayName: 'Llama 3.2', size: '2.0 GB' },
+    { name: 'mistral:latest', displayName: 'Mistral', size: '4.1 GB' },
+    { name: 'deepseek-coder:latest', displayName: 'DeepSeek Coder', size: '6.7 GB' },
+    { name: 'qwen2.5-coder:7b', displayName: 'Qwen 2.5 Coder', size: '4.7 GB' }
+  ];
+
+  ngOnInit(): void {
+    this.loadAvailableModels();
+
+    // Listen for model changes from sidebar - store reference for cleanup
+    this.modelChangeListener = (event: any) => {
+      console.log('🔄 Code Analysis component received model change:', event.detail);
+      this.selectedModel = event.detail.selectedModel;
+      this.currentModelDisplayName = event.detail.displayName;
+
+      // Update the available models to include the new selection
+      const existingModel = this.availableModels.find(m => m.name === this.selectedModel);
+      if (!existingModel) {
+        this.availableModels.push({
+          name: this.selectedModel,
+          displayName: event.detail.displayName,
+          size: 'Unknown'
+        });
+      } else {
+        existingModel.displayName = event.detail.displayName;
+      }
+
+      console.log('🎯 Code Analysis updated selectedModel to:', this.selectedModel);
+      console.log('🎯 Code Analysis updated currentModelDisplayName to:', this.currentModelDisplayName);
+
+      this.onModelChange();
+      this.cdr.markForCheck();
+    };
+
+    window.addEventListener('modelChanged', this.modelChangeListener);
+
+    // Try to get the current model from the parent component
+    try {
+      const event = new CustomEvent('requestCurrentModel');
+      window.dispatchEvent(event);
+
+      const globalModel = (window as any).currentSelectedModel;
+      if (globalModel) {
+        this.selectedModel = globalModel;
+      }
+    } catch (error) {
+      // Use default model
+    }
+  }
 
   ngOnDestroy(): void {
+    // Remove event listener
+    if (this.modelChangeListener) {
+      window.removeEventListener('modelChanged', this.modelChangeListener);
+    }
+
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  async loadAvailableModels() {
+    try {
+      const models = await this.modelService.getModels().pipe(
+        takeUntil(this.destroy$)
+      ).toPromise();
+
+      if (models && models.length > 0) {
+        this.availableModels = models.map(model => ({
+          name: model.name,
+          displayName: this.modelFormatter.formatModelName(model.name),
+          size: this.modelFormatter.formatSize(model.size)
+        }));
+
+        // Set default model if current selection is not available
+        if (!this.availableModels.find(m => m.name === this.selectedModel)) {
+          // Prefer code-focused models for analysis
+          const codeModel = this.availableModels.find(m =>
+            m.name.includes('codellama') ||
+            m.name.includes('coder') ||
+            m.name.includes('deepseek')
+          );
+          this.selectedModel = codeModel?.name || this.availableModels[0]?.name || 'llama3.2:latest';
+        }
+
+        this.cdr.markForCheck();
+      }
+    } catch (error) {
+      console.error('Failed to load models:', error);
+      // Keep default models
+    }
+  }
+
+  getModelDisplayName(): string {
+    const model = this.availableModels.find(m => m.name === this.selectedModel);
+    if (model) {
+      return model.displayName;
+    }
+
+    if (this.selectedModel) {
+      const formatted = this.modelFormatter.formatModelName(this.selectedModel);
+      return formatted;
+    }
+
+    return 'AI Assistant';
+  }
+
+  onModelChange() {
+    this.currentModelDisplayName = this.getModelDisplayName();
+    console.log('🔄 Model changed to:', this.selectedModel, '(' + this.currentModelDisplayName + ')');
+
+    // Clear cache when model changes since different models may give different results
+    this.analysisCache.clear();
+    this.cdr.markForCheck();
   }
 
   async analyzeCode() {
@@ -529,7 +689,7 @@ export class CodeAnalysisComponent implements OnDestroy {
 
         const response = await this.http.post<any>('http://localhost:5000/api/chat', {
           message: explainPrompt,
-          model: 'llama3.2:latest' // Use current model
+          model: this.selectedModel // Use selected model
         }).pipe(
           takeUntil(this.destroy$)
         ).toPromise();
@@ -540,7 +700,7 @@ export class CodeAnalysisComponent implements OnDestroy {
             summary: '📖 Code Explanation',
             details: response.response || response.message || 'Explanation generated.',
             suggestions: [],
-            modelUsed: response.model || 'llama3.2:latest'
+            modelUsed: response.model || this.selectedModel
           };
 
           // Cache the result
@@ -566,6 +726,7 @@ export class CodeAnalysisComponent implements OnDestroy {
         const response = await this.http.post<AnalysisResult>('http://localhost:5000/api/codeanalysis', {
           code: this.codeInput,
           language: 'auto', // Backend will auto-detect the language
+          model: this.selectedModel, // Use selected model
           options: options
         }).pipe(
           takeUntil(this.destroy$)
@@ -593,23 +754,41 @@ export class CodeAnalysisComponent implements OnDestroy {
     } catch (error: any) {
       console.error('❌ Failed to get analysis from Ollama model:', error);
 
-      // Extract error message
-      const errorMessage = error?.error?.message || error?.message || error?.statusText || JSON.stringify(error);
+      // Extract error message and details
+      const errorMessage = error?.error?.message || error?.message || error?.statusText || 'Unknown error';
+      const errorReason = error?.error?.reason || '';
+      const errorSuggestion = error?.error?.suggestion || '';
 
-      // Show error message instead of mock data
-      this.analysisResult = {
-        feedback: `❌ **Analysis Failed**\n\nUnable to connect to the Ollama model for code analysis. Please ensure:\n\n1. Ollama is running (http://localhost:11434)\n2. Backend API is running (http://localhost:5000)\n3. A compatible model is installed (e.g., llama3.2, codellama)\n\nError Details: ${errorMessage}`,
-        suggestions: [
-          'Check if Ollama Desktop is running',
-          'Verify the backend API is accessible',
-          'Ensure you have downloaded a compatible AI model',
-          'Try refreshing the page and attempting again',
-          'Check browser console for detailed error information'
-        ],
-        codeQuality: 0,
-        timestamp: new Date(),
-        modelUsed: 'Error - No Model Available'
-      };
+      // Check if it's a validation error (not valid code)
+      if (errorMessage.includes('does not appear to be code') || error?.status === 400) {
+        this.analysisResult = {
+          feedback: `⚠️ **Invalid Input**\n\n${errorMessage}\n\n${errorReason ? `**Reason:** ${errorReason}\n\n` : ''}${errorSuggestion || 'Please provide actual source code for analysis.'}`,
+          suggestions: [
+            'Make sure you paste actual source code (not plain text)',
+            'Code should contain programming syntax (functions, variables, etc.)',
+            'Try pasting a complete code snippet with proper structure',
+            'Examples: JavaScript functions, Python classes, C# methods, etc.'
+          ],
+          codeQuality: 0,
+          timestamp: new Date(),
+          modelUsed: 'Validation Failed'
+        };
+      } else {
+        // Other errors (connection, model issues, etc.)
+        this.analysisResult = {
+          feedback: `❌ **Analysis Failed**\n\nUnable to connect to the Ollama model for code analysis. Please ensure:\n\n1. Ollama is running (http://localhost:11434)\n2. Backend API is running (http://localhost:5000)\n3. A compatible model is installed (e.g., llama3.2, codellama)\n\nError Details: ${errorMessage}`,
+          suggestions: [
+            'Check if Ollama Desktop is running',
+            'Verify the backend API is accessible',
+            'Ensure you have downloaded a compatible AI model',
+            'Try refreshing the page and attempting again',
+            'Check browser console for detailed error information'
+          ],
+          codeQuality: 0,
+          timestamp: new Date(),
+          modelUsed: 'Error - No Model Available'
+        };
+      }
       this.cdr.markForCheck();
     }
 
