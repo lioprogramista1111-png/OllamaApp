@@ -32,7 +32,12 @@ public class ModelDownloadService : IModelDownloadService
         _logger = logger;
         _ollamaConfig = ollamaOptions.Value;
         _ollamaBaseUrl = _ollamaConfig.BaseUrl;
-        _modelsPath = _ollamaConfig.ModelsPath;
+
+        // Use Ollama's default models path
+        _modelsPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".ollama", "models"
+        );
 
         // Ensure models directory exists
         if (!string.IsNullOrEmpty(_modelsPath))
