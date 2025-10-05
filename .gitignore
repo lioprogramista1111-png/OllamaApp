@@ -1,5 +1,10 @@
 # CodeMentorAI - Git Ignore File
 
+## Ollama Setup Files
+OllamaSetup.exe
+*.exe
+!scripts/*.exe
+
 ## User-specific files
 *.rsuser
 *.suo
