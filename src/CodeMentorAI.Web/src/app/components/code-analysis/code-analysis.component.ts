@@ -130,13 +130,19 @@ interface AvailableModel {
             <!-- For Explain mode -->
             <div class="feedback-section" *ngIf="analysisResult.summary">
               <h4>{{ analysisResult.summary }}</h4>
-              <div class="feedback-content">{{ analysisResult.details }}</div>
+              <div class="feedback-content">
+                {{ displayedDetails || analysisResult.details }}
+                <span *ngIf="isTyping" class="typing-cursor">▋</span>
+              </div>
             </div>
 
             <!-- For regular analysis mode -->
             <div class="feedback-section" *ngIf="analysisResult.feedback">
               <h4>💬 AI Feedback</h4>
-              <div class="feedback-content">{{ analysisResult.feedback }}</div>
+              <div class="feedback-content">
+                {{ displayedFeedback || analysisResult.feedback }}
+                <span *ngIf="isTyping" class="typing-cursor">▋</span>
+              </div>
             </div>
 
             <div class="suggestions-section" *ngIf="analysisResult.suggestions && analysisResult.suggestions.length > 0">
@@ -459,6 +465,19 @@ interface AvailableModel {
       border-left: 4px solid #007bff;
       line-height: 1.6;
       white-space: pre-wrap;
+      position: relative;
+    }
+
+    .typing-cursor {
+      display: inline-block;
+      color: #007bff;
+      animation: blink 1s step-end infinite;
+      margin-left: 2px;
+    }
+
+    @keyframes blink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0; }
     }
 
     .suggestions-section {
@@ -538,6 +557,9 @@ export class CodeAnalysisComponent implements OnInit, OnDestroy {
   codeInput = '';
   isAnalyzing = false;
   analysisResult: AnalysisResult | null = null;
+  isTyping = false;
+  displayedFeedback = '';
+  displayedDetails = '';
 
   selectedFocus: string = 'codeQuality'; // Default to code quality
   selectedModel = 'codellama:latest'; // Default to CodeLlama for code analysis
@@ -659,6 +681,32 @@ export class CodeAnalysisComponent implements OnInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
+  async typeText(text: string, target: 'feedback' | 'details', speed: number = 15): Promise<void> {
+    return new Promise((resolve) => {
+      let index = 0;
+      this.isTyping = true;
+
+      const typeChar = () => {
+        if (index < text.length) {
+          if (target === 'feedback') {
+            this.displayedFeedback += text[index];
+          } else {
+            this.displayedDetails += text[index];
+          }
+          index++;
+          this.cdr.markForCheck();
+          setTimeout(typeChar, speed);
+        } else {
+          this.isTyping = false;
+          this.cdr.markForCheck();
+          resolve();
+        }
+      };
+
+      typeChar();
+    });
+  }
+
   async analyzeCode() {
     if (!this.codeInput.trim()) return;
 
@@ -669,12 +717,17 @@ export class CodeAnalysisComponent implements OnInit, OnDestroy {
     if (this.analysisCache.has(cacheKey)) {
       console.log('🚀 Cache hit! Using cached analysis result');
       this.analysisResult = this.analysisCache.get(cacheKey)!;
+      // For cached results, show immediately without typing animation
+      this.displayedFeedback = this.analysisResult.feedback || '';
+      this.displayedDetails = this.analysisResult.details || '';
       this.cdr.markForCheck();
       return;
     }
 
     this.isAnalyzing = true;
     this.analysisResult = null;
+    this.displayedFeedback = '';
+    this.displayedDetails = '';
     this.cdr.markForCheck();
 
     try {
@@ -695,13 +748,22 @@ export class CodeAnalysisComponent implements OnInit, OnDestroy {
         ).toPromise();
 
         if (response) {
+          const detailsText = response.response || response.message || 'Explanation generated.';
+
           // Format the explanation as an analysis result
           this.analysisResult = {
             summary: '📖 Code Explanation',
-            details: response.response || response.message || 'Explanation generated.',
+            details: detailsText,
             suggestions: [],
             modelUsed: response.model || this.selectedModel
           };
+
+          // Stop analyzing state and start typing animation
+          this.isAnalyzing = false;
+          this.cdr.markForCheck();
+
+          // Type the details with animation
+          await this.typeText(detailsText, 'details', 10);
 
           // Cache the result
           if (this.analysisCache.size >= 50) {
@@ -709,7 +771,6 @@ export class CodeAnalysisComponent implements OnInit, OnDestroy {
             this.analysisCache.delete(firstKey);
           }
           this.analysisCache.set(cacheKey, this.analysisResult);
-          this.cdr.markForCheck();
         }
       } else {
         // Convert single focus to options object for regular analysis
@@ -735,6 +796,15 @@ export class CodeAnalysisComponent implements OnInit, OnDestroy {
         if (response) {
           this.analysisResult = response;
 
+          // Stop analyzing state and start typing animation
+          this.isAnalyzing = false;
+          this.cdr.markForCheck();
+
+          // Type the feedback with animation
+          if (response.feedback) {
+            await this.typeText(response.feedback, 'feedback', 10);
+          }
+
           // Cache the result (limit cache size to prevent memory leaks)
           if (this.analysisCache.size >= 50) {
             const firstKey = this.analysisCache.keys().next().value;
@@ -745,7 +815,6 @@ export class CodeAnalysisComponent implements OnInit, OnDestroy {
           console.log('✅ Analysis completed successfully with model:', response.modelUsed);
           console.log('📊 Quality Score:', response.codeQuality);
           console.log('💡 Suggestions:', response.suggestions.length);
-          this.cdr.markForCheck();
         } else {
           throw new Error('No response received from backend');
         }
