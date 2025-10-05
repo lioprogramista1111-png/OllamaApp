@@ -33,22 +33,7 @@ interface AnalysisResult {
         <div class="input-section">
           <div class="input-header">
             <h3>📝 Your Code</h3>
-            <div class="language-selector">
-              <label>Language:</label>
-              <select [(ngModel)]="selectedLanguage" class="language-dropdown">
-                <option value="javascript">JavaScript</option>
-                <option value="typescript">TypeScript</option>
-                <option value="python">Python</option>
-                <option value="java">Java</option>
-                <option value="csharp">C#</option>
-                <option value="cpp">C++</option>
-                <option value="go">Go</option>
-                <option value="rust">Rust</option>
-                <option value="php">PHP</option>
-                <option value="ruby">Ruby</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
+            <p class="auto-detect-hint">Language will be automatically detected</p>
           </div>
           
           <div class="textarea-wrapper">
@@ -112,7 +97,7 @@ interface AnalysisResult {
           <div *ngIf="isAnalyzing" class="analysis-loading">
             <div class="loading-content">
               <div class="loading-spinner"></div>
-              <p>🤖 Ollama AI is analyzing your {{ selectedLanguage }} code...</p>
+              <p>🤖 Ollama AI is analyzing your code...</p>
               <small>Using real AI model - this may take a moment for large code snippets</small>
             </div>
           </div>
@@ -123,14 +108,9 @@ interface AnalysisResult {
               <small>🤖 Analyzed by: <strong>{{ analysisResult.modelUsed }}</strong></small>
             </div>
 
-            <!-- Language Mismatch Warning -->
-            <div *ngIf="analysisResult.languageMismatch" class="language-warning">
-              <div class="warning-icon">⚠️</div>
-              <div class="warning-content">
-                <strong>Language Mismatch Detected!</strong>
-                <p>You selected <strong>{{ selectedLanguage }}</strong>, but the AI detected <strong>{{ analysisResult.detectedLanguage }}</strong>.
-                Please verify your language selection is correct for more accurate analysis.</p>
-              </div>
+            <!-- Detected Language Info -->
+            <div *ngIf="analysisResult.detectedLanguage" class="language-info">
+              <small>🔍 Detected Language: <strong>{{ analysisResult.detectedLanguage }}</strong></small>
             </div>
 
             <!-- For Explain mode -->
@@ -219,28 +199,32 @@ interface AnalysisResult {
     }
 
     .input-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
       margin-bottom: 16px;
     }
 
     .input-header h3 {
-      margin: 0;
+      margin: 0 0 4px 0;
       color: #333;
     }
 
-    .language-selector {
-      display: flex;
-      align-items: center;
-      gap: 8px;
+    .auto-detect-hint {
+      margin: 0;
+      color: #666;
+      font-size: 13px;
+      font-style: italic;
     }
 
-    .language-dropdown {
-      padding: 6px 12px;
-      border: 1px solid #ddd;
-      border-radius: 6px;
-      font-size: 14px;
+    .language-info {
+      padding: 8px 12px;
+      background: #e3f2fd;
+      border-left: 3px solid #2196F3;
+      border-radius: 4px;
+      margin-bottom: 12px;
+    }
+
+    .language-info small {
+      color: #1976D2;
+      font-size: 13px;
     }
 
     .textarea-wrapper {
@@ -413,39 +397,7 @@ interface AnalysisResult {
       font-size: 13px;
     }
 
-    .language-warning {
-      margin-bottom: 16px;
-      padding: 12px;
-      background: #fff3cd;
-      border: 1px solid #ffeaa7;
-      border-radius: 8px;
-      border-left: 4px solid #f39c12;
-      display: flex;
-      align-items: flex-start;
-      gap: 12px;
-    }
 
-    .warning-icon {
-      font-size: 20px;
-      flex-shrink: 0;
-      margin-top: 2px;
-    }
-
-    .warning-content {
-      flex: 1;
-    }
-
-    .warning-content strong {
-      color: #d68910;
-      font-size: 14px;
-    }
-
-    .warning-content p {
-      margin: 4px 0 0 0;
-      color: #856404;
-      font-size: 13px;
-      line-height: 1.4;
-    }
 
     .feedback-section {
       margin-bottom: 24px;
@@ -537,7 +489,6 @@ export class CodeAnalysisComponent implements OnDestroy {
   private readonly analysisCache = new Map<string, AnalysisResult>();
 
   codeInput = '';
-  selectedLanguage = 'javascript';
   isAnalyzing = false;
   analysisResult: AnalysisResult | null = null;
 
@@ -551,8 +502,8 @@ export class CodeAnalysisComponent implements OnDestroy {
   async analyzeCode() {
     if (!this.codeInput.trim()) return;
 
-    // Create cache key for this analysis
-    const cacheKey = `${this.codeInput.slice(0, 100)}_${this.selectedLanguage}_${this.selectedFocus}`;
+    // Create cache key for this analysis (without language since it's auto-detected)
+    const cacheKey = `${this.codeInput.slice(0, 100)}_${this.selectedFocus}`;
 
     // Check cache first
     if (this.analysisCache.has(cacheKey)) {
@@ -568,14 +519,13 @@ export class CodeAnalysisComponent implements OnDestroy {
 
     try {
       console.log('🔍 Starting code analysis...');
-      console.log(`📝 Language: ${this.selectedLanguage}`);
       console.log(`🎯 Focus: ${this.selectedFocus}`);
       console.log(`📄 Code length: ${this.codeInput.length} characters`);
 
       // Handle "Explain the code" option differently
       if (this.selectedFocus === 'explain') {
         // For explain mode, send directly to chat/Ollama with explanation prompt
-        const explainPrompt = `Please explain the following ${this.selectedLanguage} code in detail. Break down what it does, how it works, and any important concepts:\n\n${this.codeInput}`;
+        const explainPrompt = `Please explain the following code in detail. Break down what it does, how it works, and any important concepts:\n\n${this.codeInput}`;
 
         const response = await this.http.post<any>('http://localhost:5000/api/chat', {
           message: explainPrompt,
@@ -590,7 +540,6 @@ export class CodeAnalysisComponent implements OnDestroy {
             summary: '📖 Code Explanation',
             details: response.response || response.message || 'Explanation generated.',
             suggestions: [],
-            language: this.selectedLanguage,
             modelUsed: response.model || 'llama3.2:latest'
           };
 
@@ -613,9 +562,10 @@ export class CodeAnalysisComponent implements OnDestroy {
         };
 
         // Call the backend API with real Ollama model using RxJS for better performance
+        // Language is auto-detected by the backend
         const response = await this.http.post<AnalysisResult>('http://localhost:5000/api/codeanalysis', {
           code: this.codeInput,
-          language: this.selectedLanguage,
+          language: 'auto', // Backend will auto-detect the language
           options: options
         }).pipe(
           takeUntil(this.destroy$)
@@ -658,7 +608,6 @@ export class CodeAnalysisComponent implements OnDestroy {
         ],
         codeQuality: 0,
         timestamp: new Date(),
-        language: this.selectedLanguage,
         modelUsed: 'Error - No Model Available'
       };
       this.cdr.markForCheck();
