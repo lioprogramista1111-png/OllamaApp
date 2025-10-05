@@ -9,7 +9,6 @@ public class OllamaConfiguration
     public int RequestTimeout { get; set; } = 300;
     public int MaxConcurrentRequests { get; set; } = 5;
     public bool EnablePerformanceTracking { get; set; } = true;
-    public string ModelsPath { get; set; } = string.Empty;
     public bool EnableModelDownloads { get; set; } = true;
     public int MaxDownloadConcurrency { get; set; } = 2;
     public string RegistryUrl { get; set; } = "https://ollama.ai";
