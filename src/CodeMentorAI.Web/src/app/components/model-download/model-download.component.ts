@@ -61,6 +61,10 @@ interface DownloadProgress {
       <div *ngIf="downloadProgress.length > 0" class="progress-section">
         <h3>📊 Download Progress</h3>
         <div *ngFor="let progress of downloadProgress" class="progress-item">
+          <div class="progress-header">
+            <span class="progress-model-name">{{ progress.modelName }}</span>
+            <span class="progress-percentage">{{ progress.progress }}%</span>
+          </div>
           <div class="progress-bar">
             <div
               class="progress-fill"
@@ -68,6 +72,7 @@ interface DownloadProgress {
               [class]="progress.status"
             ></div>
           </div>
+          <div class="progress-message">{{ progress.message }}</div>
         </div>
       </div>
 
@@ -368,7 +373,27 @@ interface DownloadProgress {
     .progress-header {
       display: flex;
       justify-content: space-between;
+      align-items: center;
       margin-bottom: 8px;
+    }
+
+    .progress-model-name {
+      font-weight: 600;
+      color: #333;
+      font-size: 14px;
+    }
+
+    .progress-percentage {
+      font-weight: 600;
+      color: #007bff;
+      font-size: 14px;
+    }
+
+    .progress-message {
+      font-size: 12px;
+      color: #666;
+      margin-top: 5px;
+      font-style: italic;
     }
 
     .progress-status.downloading {
@@ -455,20 +480,67 @@ export class ModelDownloadComponent {
     private http: HttpClient,
     private modelService: ModelService
   ) {
+    // Listen to real-time progress updates
     this.modelService.modelEvents$.subscribe(event => {
+      if (event.type === 'ModelPullProgress') {
+        const modelName = event.data.modelName || event.data.ModelName;
+        const status = event.data.status || event.data.Status;
+
+        const progress = this.downloadProgress.find(p =>
+          p.modelName === modelName && p.status === 'downloading'
+        );
+
+        if (progress) {
+          // Parse Ollama progress status
+          try {
+            const statusData = JSON.parse(status);
+            if (statusData.total && statusData.completed) {
+              const percentage = Math.round((statusData.completed / statusData.total) * 100);
+              progress.progress = percentage;
+              progress.message = statusData.status || 'Downloading...';
+            } else if (statusData.status) {
+              progress.message = statusData.status;
+            }
+          } catch {
+            // If not JSON, just use the status as message
+            progress.message = status;
+          }
+        }
+      }
+
       if (event.type === 'ModelPullCompleted') {
         const success = event.data.success || event.data.Success;
         const modelName = event.data.modelName || event.data.ModelName;
 
-        if (success) {
-          const progress = this.downloadProgress.find(p =>
-            p.modelName === modelName && p.status === 'downloading'
-          );
+        const progress = this.downloadProgress.find(p =>
+          p.modelName === modelName && p.status === 'downloading'
+        );
 
-          if (progress) {
+        if (progress) {
+          if (success) {
             progress.status = 'completed';
             progress.progress = 100;
             progress.message = 'Download completed successfully!';
+
+            // Hide progress bar and re-enable button after delay
+            setTimeout(() => {
+              this.downloadProgress = this.downloadProgress.filter(p => p.modelName !== modelName);
+
+              // Re-enable the download button if this was from URL download
+              if (this.currentDownloadModel === modelName) {
+                this.isDownloading = false;
+                this.currentDownloadModel = '';
+              }
+            }, 2000);
+          } else {
+            progress.status = 'error';
+            progress.message = 'Download failed!';
+
+            // Re-enable button on error
+            if (this.currentDownloadModel === modelName) {
+              this.isDownloading = false;
+              this.currentDownloadModel = '';
+            }
           }
 
           this.modelService.getModels().subscribe();
@@ -478,6 +550,12 @@ export class ModelDownloadComponent {
   }
 
   async downloadModel(modelName: string) {
+    // Check if already downloading
+    if (this.downloadProgress.some(p => p.modelName === modelName && p.status === 'downloading')) {
+      console.log(`Model ${modelName} is already downloading`);
+      return;
+    }
+
     const progress: DownloadProgress = {
       modelName,
       status: 'downloading',
@@ -495,13 +573,22 @@ export class ModelDownloadComponent {
         }
       });
 
-      if (response.ok) {
-        this.simulateDownloadProgress(progress);
-      } else {
+      if (!response.ok) {
         throw new Error('Backend API not available');
       }
+
+      // Progress updates will come via SignalR events
+      // No need to simulate - real progress will be received
     } catch (error) {
-      this.simulateDownloadProgress(progress);
+      console.error('Failed to start download:', error);
+      progress.status = 'error';
+      progress.message = 'Failed to start download';
+
+      // Re-enable button on error
+      if (this.currentDownloadModel === modelName) {
+        this.isDownloading = false;
+        this.currentDownloadModel = '';
+      }
     }
   }
 
@@ -520,9 +607,11 @@ export class ModelDownloadComponent {
 
     await this.downloadModel(modelName);
 
+    // Clear the URL input
     this.ollamaUrl = '';
-    this.currentDownloadModel = '';
-    this.isDownloading = false;
+
+    // Don't reset isDownloading and currentDownloadModel here
+    // They will be reset when ModelPullCompleted event is received
   }
 
   extractModelNameFromUrl(url: string): string | null {
@@ -547,39 +636,6 @@ export class ModelDownloadComponent {
     } catch (error) {
       return null;
     }
-  }
-
-  simulateDownloadProgress(progress: DownloadProgress) {
-    const steps = [
-      { progress: 10, message: 'Connecting to Ollama registry...' },
-      { progress: 25, message: 'Downloading model layers...' },
-      { progress: 50, message: 'Downloading model weights...' },
-      { progress: 75, message: 'Verifying download integrity...' },
-      { progress: 90, message: 'Installing model...' },
-      { progress: 100, message: 'Download completed successfully!' }
-    ];
-
-    let stepIndex = 0;
-    const interval = setInterval(() => {
-      if (stepIndex < steps.length) {
-        const step = steps[stepIndex];
-        progress.progress = step.progress;
-        progress.message = step.message;
-        stepIndex++;
-      } else {
-        progress.status = 'completed';
-        clearInterval(interval);
-        this.modelService.getModels().subscribe();
-
-        // Re-enable the download button and hide progress bar after a short delay
-        setTimeout(() => {
-          this.isDownloading = false;
-          this.currentDownloadModel = '';
-          // Remove the completed progress from the list
-          this.downloadProgress = this.downloadProgress.filter(p => p.status !== 'completed');
-        }, 1000);
-      }
-    }, 1000);
   }
 
   isModelDownloading(modelName: string): boolean {
