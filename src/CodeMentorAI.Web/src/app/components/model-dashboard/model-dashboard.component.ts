@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { ModelService } from '../../services/model.service';
@@ -8,6 +8,7 @@ import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation
   selector: 'app-model-dashboard',
   standalone: true,
   imports: [CommonModule, ConfirmationDialogComponent],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="model-management-container">
       <div class="header">
@@ -20,7 +21,7 @@ import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation
         <div *ngIf="installedModels.length === 0" class="no-models">
           <p>No models installed yet. Download some models from the Download Models page!</p>
         </div>
-        <div *ngFor="let model of installedModels" class="installed-model">
+        <div *ngFor="let model of installedModels; trackBy: trackByModelName" class="installed-model">
           <div class="installed-info">
             <span class="installed-name">{{ model.name }}</span>
             <span class="installed-size">{{ formatSize(model.size) }}</span>
@@ -166,7 +167,8 @@ export class ModelDashboardComponent implements OnInit {
 
   constructor(
     private http: HttpClient,
-    private modelService: ModelService
+    private modelService: ModelService,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit(): void {
@@ -184,19 +186,24 @@ export class ModelDashboardComponent implements OnInit {
       } else {
         this.installedModels = [];
       }
+
+      this.cdr.markForCheck();
     } catch (error) {
       this.installedModels = [];
+      this.cdr.markForCheck();
     }
   }
 
   showDeleteConfirmation(modelName: string) {
     this.modelToDelete = modelName;
     this.showDialog = true;
+    this.cdr.markForCheck();
   }
 
   cancelDelete() {
     this.showDialog = false;
     this.modelToDelete = '';
+    this.cdr.markForCheck();
   }
 
   async confirmDelete() {
@@ -221,5 +228,10 @@ export class ModelDashboardComponent implements OnInit {
     if (bytes === 0) return '0 B';
     const i = Math.floor(Math.log(bytes) / Math.log(1024));
     return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+  }
+
+  // TrackBy function for performance optimization
+  trackByModelName(index: number, model: any): string {
+    return model.name;
   }
 }

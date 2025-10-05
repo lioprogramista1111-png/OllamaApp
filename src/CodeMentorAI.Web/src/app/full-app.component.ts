@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, inject } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { SimpleOllamaChatComponent } from './components/ollama-chat/simple-ollama-chat.component';
@@ -20,6 +20,7 @@ interface AvailableModel {
   standalone: true,
   imports: [CommonModule, FormsModule, SimpleOllamaChatComponent, ModelDownloadComponent, CodeAnalysisComponent, ModelDashboardComponent, DocumentationComponent],
   providers: [ModelService],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="app-container">
       <!-- Header -->
@@ -50,7 +51,7 @@ interface AvailableModel {
                 (change)="onModelChange()"
                 class="model-dropdown-sidebar"
               >
-                <option *ngFor="let model of availableModels" [value]="model.name">
+                <option *ngFor="let model of availableModels; trackBy: trackByModelName" [value]="model.name">
                   {{ model.displayName }}
                 </option>
               </select>
@@ -528,6 +529,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   private destroy$ = new Subject<void>();
   private modelService = inject(ModelService);
+  private cdr = inject(ChangeDetectorRef);
 
   constructor() {
     (window as any).currentSelectedModel = this.selectedModel;
@@ -556,6 +558,8 @@ export class AppComponent implements OnInit, OnDestroy {
         if (!this.availableModels.find(m => m.name === this.selectedModel)) {
           this.selectedModel = this.availableModels[0]?.name || 'llama3.2:latest';
         }
+
+        this.cdr.markForCheck();
       });
 
     this.loadAvailableModels();
@@ -660,5 +664,10 @@ export class AppComponent implements OnInit, OnDestroy {
       'settings': '⚙️ Settings'
     };
     return titles[this.currentView] || 'Feature';
+  }
+
+  // TrackBy function for performance optimization
+  trackByModelName(index: number, model: AvailableModel): string {
+    return model.name;
   }
 }

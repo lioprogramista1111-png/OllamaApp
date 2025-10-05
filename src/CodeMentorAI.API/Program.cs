@@ -4,6 +4,8 @@ using CodeMentorAI.Infrastructure.Services;
 using CodeMentorAI.API.Hubs;
 using CodeMentorAI.API.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.ResponseCompression;
+using System.IO.Compression;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,8 +17,32 @@ builder.Services.AddSwaggerGen();
 // Add Memory Cache for performance optimization
 builder.Services.AddMemoryCache();
 
-// Add SignalR
-builder.Services.AddSignalR();
+// Add Response Compression for better performance
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<GzipCompressionProvider>();
+    options.Providers.Add<BrotliCompressionProvider>();
+});
+
+builder.Services.Configure<GzipCompressionProviderOptions>(options =>
+{
+    options.Level = CompressionLevel.Fastest;
+});
+
+builder.Services.Configure<BrotliCompressionProviderOptions>(options =>
+{
+    options.Level = CompressionLevel.Fastest;
+});
+
+// Add SignalR with optimized configuration
+builder.Services.AddSignalR(options =>
+{
+    options.EnableDetailedErrors = builder.Environment.IsDevelopment();
+    options.MaximumReceiveMessageSize = 102400; // 100KB
+    options.StreamBufferCapacity = 10;
+    options.MaximumParallelInvocationsPerClient = 1;
+});
 
 // Configure Ollama settings
 builder.Services.Configure<OllamaConfiguration>(
@@ -69,6 +95,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// Enable Response Compression (must be before other middleware)
+app.UseResponseCompression();
 
 // Enable CORS
 app.UseCors("AllowAngularApp");

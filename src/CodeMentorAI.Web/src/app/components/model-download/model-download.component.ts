@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
@@ -23,6 +23,7 @@ interface DownloadProgress {
   selector: 'app-model-download',
   standalone: true,
   imports: [CommonModule, FormsModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="model-download-container">
       <div class="header">
@@ -60,7 +61,7 @@ interface DownloadProgress {
       <!-- Download Progress -->
       <div *ngIf="downloadProgress.length > 0" class="progress-section">
         <h3>📊 Download Progress</h3>
-        <div *ngFor="let progress of downloadProgress" class="progress-item">
+        <div *ngFor="let progress of downloadProgress; trackBy: trackByProgressModelName" class="progress-item">
           <div class="progress-header">
             <span class="progress-model-name">{{ progress.modelName }}</span>
             <span class="progress-percentage">{{ progress.progress }}%</span>
@@ -78,7 +79,7 @@ interface DownloadProgress {
 
       <!-- Popular Models -->
       <div class="models-grid">
-        <div *ngFor="let model of popularModels" class="model-card">
+        <div *ngFor="let model of popularModels; trackBy: trackByModelName" class="model-card">
           <div class="model-header">
             <h3>{{ model.name }}</h3>
             <span class="model-size">{{ model.size }}</span>
@@ -87,7 +88,7 @@ interface DownloadProgress {
           <p class="model-description">{{ model.description }}</p>
           
           <div class="model-tags">
-            <span *ngFor="let tag of model.tags" class="tag">{{ tag }}</span>
+            <span *ngFor="let tag of model.tags; trackBy: trackByTag" class="tag">{{ tag }}</span>
           </div>
           
           <div class="model-actions">
@@ -478,7 +479,8 @@ export class ModelDownloadComponent {
 
   constructor(
     private http: HttpClient,
-    private modelService: ModelService
+    private modelService: ModelService,
+    private cdr: ChangeDetectorRef
   ) {
     // Listen to real-time progress updates
     this.modelService.modelEvents$.subscribe(event => {
@@ -505,6 +507,8 @@ export class ModelDownloadComponent {
             // If not JSON, just use the status as message
             progress.message = status;
           }
+
+          this.cdr.markForCheck();
         }
       }
 
@@ -544,6 +548,7 @@ export class ModelDownloadComponent {
           }
 
           this.modelService.getModels().subscribe();
+          this.cdr.markForCheck();
         }
       }
     });
@@ -649,5 +654,18 @@ export class ModelDownloadComponent {
       case 'error': return '❌ Error';
       default: return status;
     }
+  }
+
+  // TrackBy functions for performance optimization
+  trackByModelName(index: number, model: OllamaModel): string {
+    return model.name;
+  }
+
+  trackByProgressModelName(index: number, progress: DownloadProgress): string {
+    return progress.modelName;
+  }
+
+  trackByTag(index: number, tag: string): string {
+    return tag;
   }
 }
