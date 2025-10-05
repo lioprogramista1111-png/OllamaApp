@@ -13,13 +13,15 @@ import {
   ModelConfiguration
 } from '../models/ollama.models';
 import { SignalRService } from './signalr.service';
+import { API_CONFIG, CACHE_CONFIG, SIGNALR_CONFIG } from '../core/constants/app.constants';
+import { LoggerService } from '../core/services/logger.service';
 
 @Injectable({
   providedIn: 'root'
 })
 export class ModelService {
-  private readonly apiUrl = 'http://localhost:5000/api/models';
-  private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+  private readonly apiUrl = `${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.MODELS}`;
+  private readonly CACHE_DURATION = CACHE_CONFIG.DURATION;
 
   private modelsSubject = new BehaviorSubject<OllamaModel[]>([]);
   private currentModelSubject = new BehaviorSubject<OllamaModel | null>(null);
@@ -38,16 +40,19 @@ export class ModelService {
 
   constructor(
     private http: HttpClient,
-    private signalRService: SignalRService
+    private signalRService: SignalRService,
+    private logger: LoggerService
   ) {
+    this.logger.info('ModelService initialized', null, 'ModelService');
     this.initializeSignalRListeners();
     this.loadInitialData();
   }
 
   private initializeSignalRListeners(): void {
     // Listen for model switch events
-    this.signalRService.on('ModelSwitched', (data: any) => {
-      this.modelEventsSubject.next({ type: 'ModelSwitched', data });
+    this.signalRService.on(SIGNALR_CONFIG.EVENTS.MODEL_SWITCHED, (data: any) => {
+      this.logger.debug('Model switched event received', data, 'ModelService');
+      this.modelEventsSubject.next({ type: SIGNALR_CONFIG.EVENTS.MODEL_SWITCHED, data });
       if (data.success) {
         this.getCurrentModel().subscribe();
       }

@@ -45,7 +45,10 @@ interface AvailableModel {
 
         <div *ngIf="isLoading" class="message assistant">
           <div class="message-content">
-            <p>🤔 Thinking...</p>
+            <div class="thinking-container">
+              <div class="spinner"></div>
+              <span class="thinking-text">Thinking...</span>
+            </div>
           </div>
         </div>
       </div>
@@ -214,6 +217,31 @@ interface AvailableModel {
     .send-button:disabled {
       background: #ccc;
       cursor: not-allowed;
+    }
+
+    .thinking-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #2196F3;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .thinking-text {
+      color: #666;
+      font-style: italic;
     }
   `]
 })
