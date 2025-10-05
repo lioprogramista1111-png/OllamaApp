@@ -640,7 +640,8 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   async refreshModels() {
-    await this.loadAvailableModels();
+    console.log('🔄 Manually refreshing models...');
+    this.modelService.refreshModels().subscribe();
   }
 
   toggleSidenav() {

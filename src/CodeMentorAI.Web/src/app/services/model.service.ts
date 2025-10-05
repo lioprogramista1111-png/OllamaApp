@@ -1,11 +1,11 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, Subject, of } from 'rxjs';
-import { map, catchError } from 'rxjs/operators';
-import { 
-  OllamaModel, 
-  ModelSwitchRequest, 
-  ModelSwitchResponse, 
+import { map, catchError, shareReplay, tap } from 'rxjs/operators';
+import {
+  OllamaModel,
+  ModelSwitchRequest,
+  ModelSwitchResponse,
   ModelPerformanceMetrics,
   ModelComparison,
   ModelFilter,
@@ -19,7 +19,8 @@ import { SignalRService } from './signalr.service';
 })
 export class ModelService {
   private readonly apiUrl = 'http://localhost:5000/api/models';
-  
+  private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
   private modelsSubject = new BehaviorSubject<OllamaModel[]>([]);
   private currentModelSubject = new BehaviorSubject<OllamaModel | null>(null);
   private modelSwitchingSubject = new BehaviorSubject<boolean>(false);
@@ -29,6 +30,11 @@ export class ModelService {
   public currentModel$ = this.currentModelSubject.asObservable();
   public isModelSwitching$ = this.modelSwitchingSubject.asObservable();
   public modelEvents$ = this.modelEventsSubject.asObservable();
+
+  // Caching infrastructure
+  private lastModelsFetch = 0;
+  private modelDetailsCache = new Map<string, { data: Observable<OllamaModel>, timestamp: number }>();
+  private performanceCache = new Map<string, { data: Observable<ModelPerformanceMetrics>, timestamp: number }>();
 
   constructor(
     private http: HttpClient,
@@ -110,8 +116,18 @@ export class ModelService {
     this.getCurrentModel().subscribe();
   }
 
-  getModels(): Observable<OllamaModel[]> {
+  getModels(forceRefresh = false): Observable<OllamaModel[]> {
+    const now = Date.now();
+
+    // Return cached data if available and not expired
+    if (!forceRefresh && (now - this.lastModelsFetch) < this.CACHE_DURATION) {
+      console.log('🚀 Using cached models list');
+      return of(this.modelsSubject.value);
+    }
+
+    console.log('🔄 Fetching fresh models list from API');
     return this.http.get<OllamaModel[]>(this.apiUrl).pipe(
+      tap(() => this.lastModelsFetch = now),
       map(models => {
         this.modelsSubject.next(models);
         return models;
@@ -121,6 +137,14 @@ export class ModelService {
         return of([]);
       })
     );
+  }
+
+  /**
+   * Invalidate the models cache and force a refresh
+   */
+  refreshModels(): Observable<OllamaModel[]> {
+    this.lastModelsFetch = 0;
+    return this.getModels(true);
   }
 
   getModelsFromDisk(): Observable<string[]> {
@@ -171,16 +195,54 @@ export class ModelService {
     );
   }
 
-  getModelInfo(modelName: string): Observable<OllamaModel> {
+  getModelInfo(modelName: string, forceRefresh = false): Observable<OllamaModel> {
+    const now = Date.now();
+    const cached = this.modelDetailsCache.get(modelName);
+
+    // Return cached data if available and not expired
+    if (!forceRefresh && cached && (now - cached.timestamp) < this.CACHE_DURATION) {
+      console.log(`🚀 Using cached model info for ${modelName}`);
+      return cached.data;
+    }
+
     // URL-encode the model name to handle special characters like ':'
     const encodedModelName = encodeURIComponent(modelName);
-    return this.http.get<OllamaModel>(`${this.apiUrl}/${encodedModelName}`);
+    const request$ = this.http.get<OllamaModel>(`${this.apiUrl}/${encodedModelName}`).pipe(
+      shareReplay(1) // Share result with multiple subscribers
+    );
+
+    this.modelDetailsCache.set(modelName, { data: request$, timestamp: now });
+    return request$;
   }
 
-  getModelPerformance(modelName: string): Observable<ModelPerformanceMetrics> {
+  getModelPerformance(modelName: string, forceRefresh = false): Observable<ModelPerformanceMetrics> {
+    const now = Date.now();
+    const cached = this.performanceCache.get(modelName);
+
+    // Return cached data if available and not expired
+    if (!forceRefresh && cached && (now - cached.timestamp) < this.CACHE_DURATION) {
+      console.log(`🚀 Using cached performance data for ${modelName}`);
+      return cached.data;
+    }
+
     // URL-encode the model name to handle special characters like ':'
     const encodedModelName = encodeURIComponent(modelName);
-    return this.http.get<ModelPerformanceMetrics>(`${this.apiUrl}/${encodedModelName}/performance`);
+    const request$ = this.http.get<ModelPerformanceMetrics>(`${this.apiUrl}/${encodedModelName}/performance`).pipe(
+      shareReplay(1) // Share result with multiple subscribers
+    );
+
+    this.performanceCache.set(modelName, { data: request$, timestamp: now });
+    return request$;
+  }
+
+  /**
+   * Clear all caches
+   */
+  clearCache(): void {
+    this.lastModelsFetch = 0;
+    this.modelDetailsCache.clear();
+    this.performanceCache.clear();
+    console.log('🧹 All caches cleared');
   }
 
   getPerformanceComparison(): Observable<ModelComparison> {

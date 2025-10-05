@@ -17,6 +17,9 @@ builder.Services.AddSwaggerGen();
 // Add Memory Cache for performance optimization
 builder.Services.AddMemoryCache();
 
+// Add Response Caching for HTTP caching
+builder.Services.AddResponseCaching();
+
 // Add Response Compression for better performance
 builder.Services.AddResponseCompression(options =>
 {
@@ -98,6 +101,28 @@ app.UseHttpsRedirection();
 
 // Enable Response Compression (must be before other middleware)
 app.UseResponseCompression();
+
+// Enable Response Caching
+app.UseResponseCaching();
+
+// Add cache control headers for API endpoints
+app.Use(async (context, next) =>
+{
+    // Cache model list for 5 minutes
+    if (context.Request.Path.StartsWithSegments("/api/models") &&
+        context.Request.Method == "GET" &&
+        !context.Request.Path.Value.Contains("/performance"))
+    {
+        context.Response.GetTypedHeaders().CacheControl =
+            new Microsoft.Net.Http.Headers.CacheControlHeaderValue
+            {
+                Public = true,
+                MaxAge = TimeSpan.FromMinutes(5)
+            };
+    }
+
+    await next();
+});
 
 // Enable CORS
 app.UseCors("AllowAngularApp");
