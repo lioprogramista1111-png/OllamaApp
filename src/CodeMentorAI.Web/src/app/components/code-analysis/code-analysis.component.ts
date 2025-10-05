@@ -640,17 +640,21 @@ export class CodeAnalysisComponent implements OnDestroy {
         }
       }
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Failed to get analysis from Ollama model:', error);
+
+      // Extract error message
+      const errorMessage = error?.error?.message || error?.message || error?.statusText || JSON.stringify(error);
 
       // Show error message instead of mock data
       this.analysisResult = {
-        feedback: `❌ **Analysis Failed**\n\nUnable to connect to the Ollama model for code analysis. Please ensure:\n\n1. Ollama is running (http://localhost:11434)\n2. Backend API is running (http://localhost:5000)\n3. A compatible model is installed (e.g., llama3.2, codellama)\n\nError: ${error}`,
+        feedback: `❌ **Analysis Failed**\n\nUnable to connect to the Ollama model for code analysis. Please ensure:\n\n1. Ollama is running (http://localhost:11434)\n2. Backend API is running (http://localhost:5000)\n3. A compatible model is installed (e.g., llama3.2, codellama)\n\nError Details: ${errorMessage}`,
         suggestions: [
           'Check if Ollama Desktop is running',
           'Verify the backend API is accessible',
           'Ensure you have downloaded a compatible AI model',
-          'Try refreshing the page and attempting again'
+          'Try refreshing the page and attempting again',
+          'Check browser console for detailed error information'
         ],
         codeQuality: 0,
         timestamp: new Date(),
