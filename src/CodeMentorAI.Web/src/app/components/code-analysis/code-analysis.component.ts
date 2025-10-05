@@ -735,89 +735,51 @@ export class CodeAnalysisComponent implements OnInit, OnDestroy {
       console.log(`🎯 Focus: ${this.selectedFocus}`);
       console.log(`📄 Code length: ${this.codeInput.length} characters`);
 
-      // Handle "Explain the code" option differently
-      if (this.selectedFocus === 'explain') {
-        // For explain mode, send directly to chat/Ollama with explanation prompt
-        const explainPrompt = `Please explain the following code in detail. Break down what it does, how it works, and any important concepts:\n\n${this.codeInput}`;
+      // Convert single focus to options object for analysis
+      const options = {
+        codeQuality: this.selectedFocus === 'codeQuality',
+        performance: this.selectedFocus === 'performance',
+        security: this.selectedFocus === 'security',
+        bugs: this.selectedFocus === 'bugs',
+        refactoring: this.selectedFocus === 'refactoring',
+        explain: this.selectedFocus === 'explain'
+      };
 
-        const response = await this.http.post<any>('http://localhost:5000/api/chat', {
-          message: explainPrompt,
-          model: this.selectedModel // Use selected model
-        }).pipe(
-          takeUntil(this.destroy$)
-        ).toPromise();
+      // Call the backend API with real Ollama model using RxJS for better performance
+      // Language is auto-detected by the backend
+      const response = await this.http.post<AnalysisResult>('http://localhost:5000/api/codeanalysis', {
+        code: this.codeInput,
+        language: 'auto', // Backend will auto-detect the language
+        model: this.selectedModel, // Use selected model
+        options: options
+      }).pipe(
+        takeUntil(this.destroy$)
+      ).toPromise();
 
-        if (response) {
-          const detailsText = response.response || response.message || 'Explanation generated.';
+      if (response) {
+        this.analysisResult = response;
 
-          // Format the explanation as an analysis result
-          this.analysisResult = {
-            summary: '📖 Code Explanation',
-            details: detailsText,
-            suggestions: [],
-            modelUsed: response.model || this.selectedModel
-          };
+        // Stop analyzing state and start typing animation
+        this.isAnalyzing = false;
+        this.cdr.markForCheck();
 
-          // Stop analyzing state and start typing animation
-          this.isAnalyzing = false;
-          this.cdr.markForCheck();
-
-          // Type the details with animation
-          await this.typeText(detailsText, 'details', 10);
-
-          // Cache the result
-          if (this.analysisCache.size >= 50) {
-            const firstKey = this.analysisCache.keys().next().value;
-            this.analysisCache.delete(firstKey);
-          }
-          this.analysisCache.set(cacheKey, this.analysisResult);
+        // Type the feedback with animation
+        if (response.feedback) {
+          await this.typeText(response.feedback, 'feedback', 10);
         }
+
+        // Cache the result (limit cache size to prevent memory leaks)
+        if (this.analysisCache.size >= 50) {
+          const firstKey = this.analysisCache.keys().next().value;
+          this.analysisCache.delete(firstKey);
+        }
+        this.analysisCache.set(cacheKey, response);
+
+        console.log('✅ Analysis completed successfully with model:', response.modelUsed);
+        console.log('📊 Quality Score:', response.codeQuality);
+        console.log('💡 Suggestions:', response.suggestions?.length || 0);
       } else {
-        // Convert single focus to options object for regular analysis
-        const options = {
-          codeQuality: this.selectedFocus === 'codeQuality',
-          performance: this.selectedFocus === 'performance',
-          security: this.selectedFocus === 'security',
-          bugs: this.selectedFocus === 'bugs',
-          refactoring: this.selectedFocus === 'refactoring'
-        };
-
-        // Call the backend API with real Ollama model using RxJS for better performance
-        // Language is auto-detected by the backend
-        const response = await this.http.post<AnalysisResult>('http://localhost:5000/api/codeanalysis', {
-          code: this.codeInput,
-          language: 'auto', // Backend will auto-detect the language
-          model: this.selectedModel, // Use selected model
-          options: options
-        }).pipe(
-          takeUntil(this.destroy$)
-        ).toPromise();
-
-        if (response) {
-          this.analysisResult = response;
-
-          // Stop analyzing state and start typing animation
-          this.isAnalyzing = false;
-          this.cdr.markForCheck();
-
-          // Type the feedback with animation
-          if (response.feedback) {
-            await this.typeText(response.feedback, 'feedback', 10);
-          }
-
-          // Cache the result (limit cache size to prevent memory leaks)
-          if (this.analysisCache.size >= 50) {
-            const firstKey = this.analysisCache.keys().next().value;
-            this.analysisCache.delete(firstKey);
-          }
-          this.analysisCache.set(cacheKey, response);
-
-          console.log('✅ Analysis completed successfully with model:', response.modelUsed);
-          console.log('📊 Quality Score:', response.codeQuality);
-          console.log('💡 Suggestions:', response.suggestions.length);
-        } else {
-          throw new Error('No response received from backend');
-        }
+        throw new Error('No response received from backend');
       }
 
     } catch (error: any) {

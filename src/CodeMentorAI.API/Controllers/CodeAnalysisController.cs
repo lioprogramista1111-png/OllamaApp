@@ -53,11 +53,12 @@ public class CodeAnalysisController : ControllerBase
 
             _logger.LogInformation("✅ Code validation passed: {Type}", codeValidation.DetectedType);
 
-            _logger.LogInformation("Analysis focus areas: CodeQuality={CodeQuality}, Performance={Performance}, Security={Security}, Bugs={Bugs}, Refactoring={Refactoring}",
-                request.Options.CodeQuality, request.Options.Performance, request.Options.Security, request.Options.Bugs, request.Options.Refactoring);
+            _logger.LogInformation("Analysis focus areas: CodeQuality={CodeQuality}, Performance={Performance}, Security={Security}, Bugs={Bugs}, Refactoring={Refactoring}, Explain={Explain}",
+                request.Options.CodeQuality, request.Options.Performance, request.Options.Security, request.Options.Bugs, request.Options.Refactoring, request.Options.Explain);
 
             // Log the single selected focus
-            var selectedFocus = request.Options.CodeQuality ? "CODE QUALITY" :
+            var selectedFocus = request.Options.Explain ? "EXPLAIN CODE" :
+                               request.Options.CodeQuality ? "CODE QUALITY" :
                                request.Options.Performance ? "PERFORMANCE" :
                                request.Options.Security ? "SECURITY" :
                                request.Options.Bugs ? "BUG DETECTION" :
@@ -382,7 +383,29 @@ public class CodeAnalysisController : ControllerBase
         string selectedFocus = "";
         string focusDescription = "";
 
-        if (request.Options.CodeQuality)
+        if (request.Options.Explain)
+        {
+            // Special handling for Explain mode
+            var actualLanguage = !string.IsNullOrEmpty(detectedLanguage) && detectedLanguage != "unknown" ? detectedLanguage : request.Language;
+
+            return $@"You are a helpful code teacher. Explain the following {actualLanguage} code in detail.
+
+Please provide a clear, educational explanation that covers:
+1. **What the code does** - High-level purpose and functionality
+2. **How it works** - Step-by-step breakdown of the logic
+3. **Key concepts** - Important programming concepts used
+4. **Language features** - Specific {actualLanguage} features or syntax used
+
+Be thorough but clear. Use simple language suitable for learning.
+
+Code:
+```{actualLanguage}
+{request.Code}
+```
+
+Provide a detailed explanation:";
+        }
+        else if (request.Options.CodeQuality)
         {
             selectedFocus = "CODE QUALITY";
             focusDescription = "code quality and best practices (naming conventions, code structure, readability, maintainability, SOLID principles)";
@@ -664,6 +687,7 @@ public class AnalysisOptions
     public bool Security { get; set; }
     public bool Bugs { get; set; }
     public bool Refactoring { get; set; }
+    public bool Explain { get; set; }
 }
 
 public class CodeAnalysisResult
