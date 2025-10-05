@@ -1,0 +1,66 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Backend", "Backend", "{76B4E188-B3E3-480B-A3A4-84EF85FF7DA2}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Frontend", "Frontend", "{621597DE-311E-4CC7-A7C8-0A1BBE1C4C89}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{6A57A0E4-D7E7-4CE9-8F7D-4F025F43DB7C}"
+	ProjectSection(SolutionItems) = preProject
+		.editorconfig = .editorconfig
+		.gitignore = .gitignore
+		README.md = README.md
+		GET_STARTED.md = GET_STARTED.md
+		VISUAL_STUDIO_TEST_GUIDE.md = VISUAL_STUDIO_TEST_GUIDE.md
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{4C78A8C4-9D7E-48AD-8938-002B6393347E}"
+	ProjectSection(SolutionItems) = preProject
+		docs\CHAT_FOCUS_IMPROVEMENTS.md = docs\CHAT_FOCUS_IMPROVEMENTS.md
+		docs\CODE_VALIDATION_FEATURE.md = docs\CODE_VALIDATION_FEATURE.md
+		docs\MODEL_MANAGEMENT.md = docs\MODEL_MANAGEMENT.md
+		docs\OPTIMIZATION_QUICK_REFERENCE.md = docs\OPTIMIZATION_QUICK_REFERENCE.md
+		docs\OPTIMIZATION_SUMMARY.md = docs\OPTIMIZATION_SUMMARY.md
+		docs\QUICKSTART_VISUAL_STUDIO.md = docs\QUICKSTART_VISUAL_STUDIO.md
+		docs\README.md = docs\README.md
+		docs\REMOVED_INSTALLED_MODELS_SECTION.md = docs\REMOVED_INSTALLED_MODELS_SECTION.md
+		docs\SETUP.md = docs\SETUP.md
+		docs\VISUAL_STUDIO_GUIDE.md = docs\VISUAL_STUDIO_GUIDE.md
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "scripts", "scripts", "{1532BA72-B6B2-4C28-8917-4DA4B5B2C432}"
+	ProjectSection(SolutionItems) = preProject
+		scripts\start-app.bat = scripts\start-app.bat
+		scripts\start-app.ps1 = scripts\start-app.ps1
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodeMentorAI.API", "src\CodeMentorAI.API\CodeMentorAI.API.csproj", "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodeMentorAI.Core", "src\CodeMentorAI.Core\CodeMentorAI.Core.csproj", "{7D3FCF5D-2EF1-48C8-AEAC-C45FD1C1C622}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodeMentorAI.Infrastructure", "src\CodeMentorAI.Infrastructure\CodeMentorAI.Infrastructure.csproj", "{AF928A42-9D1B-48ED-8EB0-4FBF3ACDB3D8}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7D3FCF5D-2EF1-48C8-AEAC-C45FD1C1C622}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7D3FCF5D-2EF1-48C8-AEAC-C45FD1C1C622}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7D3FCF5D-2EF1-48C8-AEAC-C45FD1C1C622}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7D3FCF5D-2EF1-48C8-AEAC-C45FD1C1C622}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AF928A42-9D1B-48ED-8EB0-4FBF3ACDB3D8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AF928A42-9D1B-48ED-8EB0-4FBF3ACDB3D8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AF928A42-9D1B-48ED-8EB0-4FBF3ACDB3D8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AF928A42-9D1B-48ED-8EB0-4FBF3ACDB3D8}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

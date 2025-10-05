@@ -1,0 +1,523 @@
+import { Component } from '@angular/core';
+import { CommonModule } from '@angular/common';
+
+interface ChatMessage {
+  id: string;
+  type: 'user' | 'assistant' | 'system' | 'error';
+  content: string;
+  timestamp: Date;
+  model?: string;
+  tokens?: number;
+  duration?: number;
+}
+
+
+
+@Component({
+  selector: 'app-ollama-chat',
+  standalone: true,
+  imports: [
+    CommonModule
+  ],
+  templateUrl: './ollama-chat.component.html',
+  styleUrls: ['./ollama-chat.component.scss']
+})
+export class OllamaChatComponent {
+  @ViewChild('chatContainer') chatContainer!: ElementRef;
+  @ViewChild('messageInput') messageInput!: ElementRef;
+
+  private destroy$ = new Subject<void>();
+  
+  chatForm: FormGroup;
+  messages: ChatMessage[] = [];
+  availableModels: OllamaModel[] = [];
+  selectedModel: string = 'llama3.2';
+  isLoading = false;
+  isConnected = false;
+  
+  // Command history
+  commandHistory: string[] = [];
+  historyIndex = -1;
+  
+  // Quick commands
+  quickCommands = [
+    { label: 'List Models', command: '/list' },
+    { label: 'Model Info', command: '/show ' },
+    { label: 'Pull Model', command: '/pull ' },
+    { label: 'Remove Model', command: '/rm ' },
+    { label: 'Clear Chat', command: '/clear' },
+    { label: 'Help', command: '/help' }
+  ];
+
+  constructor(
+    private fb: FormBuilder,
+    private snackBar: MatSnackBar,
+    private ollamaApi: OllamaApiService
+  ) {
+    this.chatForm = this.fb.group({
+      message: ['', Validators.required],
+      model: ['llama3.2']
+    });
+  }
+
+  ngOnInit(): void {
+    this.initializeChat();
+    this.autoStartOllama();
+  }
+
+  private async autoStartOllama(): Promise<void> {
+    this.addSystemMessage('🚀 Starting Ollama service...');
+
+    // First, try to check if Ollama is already running
+    const isRunning = await this.checkOllamaConnection();
+
+    if (!isRunning) {
+      this.addSystemMessage('⚠️ Ollama not detected. Attempting to start service...');
+
+      try {
+        // Try to start Ollama service through backend
+        const response = await fetch('http://localhost:5000/api/ollama/start', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
+
+        if (response.ok) {
+          this.addSystemMessage('✅ Ollama service started successfully!');
+          // Wait a moment for service to initialize
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        } else {
+          this.addSystemMessage('❌ Failed to start Ollama service through backend.');
+        }
+      } catch (error) {
+        this.addSystemMessage('❌ Could not communicate with backend to start Ollama.');
+      }
+
+      // Check connection again after attempting to start
+      await this.checkOllamaConnection();
+    }
+
+    await this.loadAvailableModels();
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  ngAfterViewChecked(): void {
+    this.scrollToBottom();
+  }
+
+  private initializeChat(): void {
+    this.addSystemMessage('Welcome to Ollama Chat UI! 🦙');
+    this.addSystemMessage('Type your message or use commands like /list, /pull, /show, etc.');
+    this.addSystemMessage('Use arrow keys to navigate command history.');
+  }
+
+  private async checkOllamaConnection(): Promise<boolean> {
+    try {
+      await this.ollamaApi.getModels().toPromise();
+      this.isConnected = true;
+      this.addSystemMessage('✅ Connected to CodeMentor AI backend successfully!');
+      return true;
+    } catch (error) {
+      this.isConnected = false;
+      this.addSystemMessage('❌ Backend is not running. Please start the CodeMentor AI API.');
+      return false;
+    }
+  }
+
+  private async loadAvailableModels(): Promise<void> {
+    try {
+      const models = await this.ollamaApi.getModels().toPromise();
+      this.availableModels = models || [];
+
+      if (this.availableModels.length > 0) {
+        // Keep llama3.2 as default if available, otherwise use first model
+        const llama32Model = this.availableModels.find(m => m.name === 'llama3.2');
+        this.selectedModel = llama32Model ? 'llama3.2' : this.availableModels[0].name;
+        this.chatForm.patchValue({ model: this.selectedModel });
+        this.addSystemMessage(`📋 Found ${this.availableModels.length} models. Selected: ${this.selectedModel}`);
+      } else {
+        this.addSystemMessage('📋 No models found. Use /pull <model> to download a model.');
+      }
+    } catch (error) {
+      this.addSystemMessage('❌ Failed to load models. Check backend connection.');
+    }
+  }
+
+  async sendMessage(): Promise<void> {
+    const messageText = this.chatForm.get('message')?.value?.trim();
+    if (!messageText) return;
+
+    // Add to command history
+    this.commandHistory.unshift(messageText);
+    if (this.commandHistory.length > 50) {
+      this.commandHistory.pop();
+    }
+    this.historyIndex = -1;
+
+    // Add user message
+    this.addUserMessage(messageText);
+    
+    // Clear input
+    this.chatForm.patchValue({ message: '' });
+
+    // Handle commands or chat
+    if (messageText.startsWith('/')) {
+      await this.handleCommand(messageText);
+    } else {
+      await this.handleChatMessage(messageText);
+    }
+  }
+
+  private async handleCommand(command: string): Promise<void> {
+    const parts = command.split(' ');
+    const cmd = parts[0].toLowerCase();
+    const args = parts.slice(1);
+
+    this.isLoading = true;
+
+    try {
+      switch (cmd) {
+        case '/list':
+          await this.listModels();
+          break;
+        case '/pull':
+          if (args.length > 0) {
+            await this.pullModel(args[0]);
+          } else {
+            this.addErrorMessage('Usage: /pull <model_name>');
+          }
+          break;
+        case '/show':
+          if (args.length > 0) {
+            await this.showModelInfo(args[0]);
+          } else {
+            this.addErrorMessage('Usage: /show <model_name>');
+          }
+          break;
+        case '/rm':
+          if (args.length > 0) {
+            await this.removeModel(args[0]);
+          } else {
+            this.addErrorMessage('Usage: /rm <model_name>');
+          }
+          break;
+        case '/clear':
+          this.clearChat();
+          break;
+        case '/help':
+          this.showHelp();
+          break;
+        default:
+          this.addErrorMessage(`Unknown command: ${cmd}. Type /help for available commands.`);
+      }
+    } catch (error) {
+      this.addErrorMessage(`Command failed: ${error}`);
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  private async handleChatMessage(message: string): Promise<void> {
+    if (!this.selectedModel) {
+      this.addErrorMessage('Please select a model first or use /list to see available models.');
+      return;
+    }
+
+    this.isLoading = true;
+    const startTime = Date.now();
+
+    try {
+      const response = await fetch('http://localhost:5000/api/chat/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: this.selectedModel,
+          prompt: message,
+          stream: false
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const duration = Date.now() - startTime;
+        
+        this.addAssistantMessage(
+          data.response,
+          this.selectedModel,
+          data.eval_count || 0,
+          duration
+        );
+      } else {
+        this.addErrorMessage(`Failed to get response: ${response.statusText}`);
+      }
+    } catch (error) {
+      this.addErrorMessage(`Error: ${error}`);
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  private async listModels(): Promise<void> {
+    try {
+      const response = await fetch('http://localhost:5000/api/models');
+      if (response.ok) {
+        const data = await response.json();
+        const models = data || [];
+        
+        if (models.length === 0) {
+          this.addSystemMessage('📋 No models installed.');
+        } else {
+          let modelList = '📋 **Installed Models:**\n\n';
+          models.forEach((model: OllamaModel) => {
+            const size = this.formatFileSize(model.size);
+            const date = new Date(model.modified_at).toLocaleDateString();
+            modelList += `• **${model.name}** (${size}) - Modified: ${date}\n`;
+          });
+          this.addSystemMessage(modelList);
+        }
+        
+        // Refresh the model list
+        this.availableModels = models;
+      }
+    } catch (error) {
+      this.addErrorMessage(`Failed to list models: ${error}`);
+    }
+  }
+
+  private async pullModel(modelName: string): Promise<void> {
+    this.addSystemMessage(`🔄 Pulling model: ${modelName}...`);
+
+    try {
+      const response = await fetch(`http://localhost:5000/api/models/${modelName}/pull`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (response.ok) {
+        this.addSystemMessage(`✅ Successfully pulled model: ${modelName}`);
+        await this.loadAvailableModels(); // Refresh model list
+      } else {
+        this.addErrorMessage(`Failed to pull model: ${response.statusText}`);
+      }
+    } catch (error) {
+      this.addErrorMessage(`Error pulling model: ${error}`);
+    }
+  }
+
+  private async showModelInfo(modelName: string): Promise<void> {
+    try {
+      const response = await fetch(`http://localhost:5000/api/models/${modelName}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        let info = `📊 **Model Info: ${modelName}**\n\n`;
+        info += `• **Size**: ${this.formatFileSize(data.size || 0)}\n`;
+        info += `• **Modified**: ${new Date(data.modified_at || '').toLocaleString()}\n`;
+        info += `• **Format**: ${data.details?.format || 'Unknown'}\n`;
+        info += `• **Family**: ${data.details?.family || 'Unknown'}\n`;
+        if (data.details?.parameter_size) {
+          info += `• **Parameters**: ${data.details.parameter_size}\n`;
+        }
+        this.addSystemMessage(info);
+      } else {
+        this.addErrorMessage(`Model not found: ${modelName}`);
+      }
+    } catch (error) {
+      this.addErrorMessage(`Error getting model info: ${error}`);
+    }
+  }
+
+  private async removeModel(modelName: string): Promise<void> {
+    try {
+      const response = await fetch(`http://localhost:5000/api/models/${modelName}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (response.ok) {
+        this.addSystemMessage(`🗑️ Successfully removed model: ${modelName}`);
+        await this.loadAvailableModels(); // Refresh model list
+      } else {
+        this.addErrorMessage(`Failed to remove model: ${response.statusText}`);
+      }
+    } catch (error) {
+      this.addErrorMessage(`Error removing model: ${error}`);
+    }
+  }
+
+  private clearChat(): void {
+    this.messages = [];
+    this.initializeChat();
+  }
+
+  private showHelp(): void {
+    const help = `🔧 **Available Commands:**
+
+**Chat Commands:**
+• Just type a message to chat with the selected model
+
+**Model Management:**
+• \`/list\` - List all installed models
+• \`/pull <model>\` - Download a model (e.g., /pull llama2:7b)
+• \`/show <model>\` - Show detailed model information
+• \`/rm <model>\` - Remove a model
+
+**Utility:**
+• \`/clear\` - Clear chat history
+• \`/help\` - Show this help message
+
+**Tips:**
+• Use arrow keys to navigate command history
+• Select a model from the dropdown for chatting
+• Commands start with / and messages don't`;
+
+    this.addSystemMessage(help);
+  }
+
+  // Message helper methods
+  private addUserMessage(content: string): void {
+    this.messages.push({
+      id: this.generateId(),
+      type: 'user',
+      content,
+      timestamp: new Date()
+    });
+  }
+
+  private addAssistantMessage(content: string, model?: string, tokens?: number, duration?: number): void {
+    this.messages.push({
+      id: this.generateId(),
+      type: 'assistant',
+      content,
+      timestamp: new Date(),
+      model,
+      tokens,
+      duration
+    });
+  }
+
+  private addSystemMessage(content: string): void {
+    this.messages.push({
+      id: this.generateId(),
+      type: 'system',
+      content,
+      timestamp: new Date()
+    });
+  }
+
+  private addErrorMessage(content: string): void {
+    this.messages.push({
+      id: this.generateId(),
+      type: 'error',
+      content,
+      timestamp: new Date()
+    });
+  }
+
+  // Utility methods
+  private generateId(): string {
+    return Math.random().toString(36).substr(2, 9);
+  }
+
+  formatFileSize(bytes: number): string {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+
+  private scrollToBottom(): void {
+    if (this.chatContainer) {
+      const element = this.chatContainer.nativeElement;
+      element.scrollTop = element.scrollHeight;
+    }
+  }
+
+  // Event handlers
+  onModelChange(): void {
+    this.selectedModel = this.chatForm.get('model')?.value || '';
+    if (this.selectedModel) {
+      this.addSystemMessage(`🔄 Switched to model: ${this.selectedModel}`);
+    }
+  }
+
+  onKeyDown(event: KeyboardEvent): void {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      this.sendMessage();
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      this.navigateHistory('up');
+    } else if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      this.navigateHistory('down');
+    }
+  }
+
+  private navigateHistory(direction: 'up' | 'down'): void {
+    if (this.commandHistory.length === 0) return;
+
+    if (direction === 'up') {
+      this.historyIndex = Math.min(this.historyIndex + 1, this.commandHistory.length - 1);
+    } else {
+      this.historyIndex = Math.max(this.historyIndex - 1, -1);
+    }
+
+    const command = this.historyIndex >= 0 ? this.commandHistory[this.historyIndex] : '';
+    this.chatForm.patchValue({ message: command });
+  }
+
+  useQuickCommand(command: string): void {
+    this.chatForm.patchValue({ message: command });
+    this.messageInput.nativeElement.focus();
+  }
+
+  copyMessage(content: string): void {
+    navigator.clipboard.writeText(content).then(() => {
+      this.snackBar.open('Message copied to clipboard!', 'Close', { duration: 2000 });
+    });
+  }
+
+  getCurrentTime(): string {
+    return new Date().toLocaleTimeString('en-US', {
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+  }
+
+  get currentTime(): string {
+    return this.getCurrentTime();
+  }
+
+  // Test method to verify chat functionality
+  async testChat(): Promise<void> {
+    console.log('🧪 Testing Ollama Chat functionality...');
+
+    // Set a test message
+    this.chatForm.patchValue({ message: 'Hello! This is a test message.' });
+
+    // Send the message
+    await this.sendMessage();
+
+    console.log('✅ Test message sent successfully!');
+  }
+}

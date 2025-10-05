@@ -1,0 +1,397 @@
+<div class="model-browser">
+  <div class="browser-header">
+    <h1>
+      <mat-icon>explore</mat-icon>
+      Model Browser
+    </h1>
+    <p class="subtitle">Discover and download AI models from the Ollama registry</p>
+  </div>
+
+  <!-- SIMPLE DEBUG SECTION -->
+  <div style="background: #fff3cd; padding: 20px; margin: 20px 0; border-radius: 8px; border: 1px solid #ffeaa7;">
+    <h3 style="color: #856404; margin: 0 0 15px 0;">🐛 DEBUG INFORMATION</h3>
+    <p><strong>Featured Models Count:</strong> {{ featuredModels.length }}</p>
+    <p><strong>Loading State:</strong> {{ isLoading }}</p>
+    <p><strong>Models Path:</strong> {{ modelsPath || 'Not set' }}</p>
+    <p><strong>Local Models Count:</strong> {{ localModels.length }}</p>
+  </div>
+
+  <!-- Models Path Information -->
+  <mat-card class="models-path-info" *ngIf="modelsPath">
+    <mat-card-header>
+      <mat-card-title>
+        <mat-icon>folder</mat-icon>
+        Models Storage Location
+      </mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="path-info">
+        <div class="path-label">Downloaded models are stored in:</div>
+        <div class="path-value">
+          <code>{{modelsPath}}</code>
+          <button mat-icon-button
+                  matTooltip="Copy path to clipboard"
+                  (click)="copyToClipboard(modelsPath)">
+            <mat-icon>content_copy</mat-icon>
+          </button>
+        </div>
+        <div class="local-models-summary" *ngIf="localModels.length > 0">
+          <mat-icon>info</mat-icon>
+          <span>{{localModels.length}} model(s) currently stored locally</span>
+        </div>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- Active Downloads Panel -->
+  <mat-card class="downloads-panel" *ngIf="activeDownloads.length > 0">
+    <mat-card-header>
+      <mat-card-title>
+        <mat-icon>download</mat-icon>
+        Active Downloads
+        <mat-chip-set>
+          <mat-chip [highlighted]="true">{{activeDownloads.length}}</mat-chip>
+        </mat-chip-set>
+      </mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <div class="download-list">
+        <div class="download-item" *ngFor="let download of activeDownloads">
+          <div class="download-info">
+            <div class="download-name">{{download.modelName}}</div>
+            <div class="download-status">{{download.status}}</div>
+            <div class="download-details">
+              <span *ngIf="download.totalBytes > 0">
+                {{formatFileSize(download.bytesDownloaded)}} / {{formatFileSize(download.totalBytes)}}
+              </span>
+              <span *ngIf="download.downloadSpeed > 0" class="speed">
+                {{formatDownloadSpeed(download.downloadSpeed)}}
+              </span>
+              <span *ngIf="download.estimatedTimeRemaining" class="eta">
+                ETA: {{formatDuration(download.estimatedTimeRemaining)}}
+              </span>
+            </div>
+          </div>
+          <div class="download-progress">
+            <mat-progress-bar 
+              mode="determinate" 
+              [value]="download.progressPercentage"
+              [color]="download.hasError ? 'warn' : 'primary'">
+            </mat-progress-bar>
+            <div class="progress-text">{{download.progressPercentage.toFixed(1)}}%</div>
+          </div>
+          <div class="download-actions">
+            <button mat-icon-button 
+                    color="warn" 
+                    (click)="cancelDownload(download.modelName)"
+                    matTooltip="Cancel Download">
+              <mat-icon>cancel</mat-icon>
+            </button>
+          </div>
+        </div>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- Search and Filters -->
+  <mat-card class="search-card">
+    <mat-card-content>
+      <form [formGroup]="searchForm" class="search-form">
+        <div class="search-row">
+          <mat-form-field appearance="outline" class="search-field">
+            <mat-label>Search models</mat-label>
+            <input matInput 
+                   formControlName="query" 
+                   placeholder="Search by name, description, or tags...">
+            <mat-icon matSuffix>search</mat-icon>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Category</mat-label>
+            <mat-select formControlName="category">
+              <mat-option value="">All Categories</mat-option>
+              <mat-option *ngFor="let category of categories" [value]="category">
+                {{category}}
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Sort by</mat-label>
+            <mat-select formControlName="sortBy">
+              <mat-option value="downloads">Downloads</mat-option>
+              <mat-option value="name">Name</mat-option>
+              <mat-option value="size">Size</mat-option>
+              <mat-option value="updated">Updated</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Order</mat-label>
+            <mat-select formControlName="sortOrder">
+              <mat-option value="desc">Descending</mat-option>
+              <mat-option value="asc">Ascending</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <button mat-raised-button 
+                  color="primary" 
+                  (click)="performSearch()"
+                  [disabled]="isLoading">
+            <mat-icon>search</mat-icon>
+            Search
+          </button>
+
+          <button mat-button (click)="clearSearch()">
+            <mat-icon>clear</mat-icon>
+            Clear
+          </button>
+        </div>
+      </form>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- Tabs for Featured and Search Results -->
+  <mat-tab-group [(selectedIndex)]="selectedTab" class="content-tabs">
+    <!-- Featured Models Tab -->
+    <mat-tab label="Featured Models">
+      <div class="tab-content">
+        <!-- Debug info -->
+        <div style="background: #ffeb3b; padding: 20px; margin: 10px 0; border-radius: 4px; border: 3px solid #ff5722;">
+          <h2 style="color: #d32f2f; margin: 0 0 10px 0;">🔍 DEBUG INFO</h2>
+          <strong>Featured Models Count: {{featuredModels.length}}</strong><br>
+          <strong>Component Loaded: YES</strong><br>
+          <strong>Template Rendered: YES</strong><br>
+          <div style="margin-top: 10px; font-size: 12px; max-height: 200px; overflow: auto;">
+            <strong>Models Data:</strong><br>
+            <pre>{{featuredModels | json}}</pre>
+          </div>
+        </div>
+
+        <!-- FORCE SHOW TEST BUTTONS -->
+        <div style="background: #e8f5e8; padding: 20px; margin: 20px 0; border-radius: 8px;">
+          <h3 style="color: #2e7d32; margin: 0 0 15px 0;">🧪 TEST DOWNLOAD BUTTONS</h3>
+          <button mat-raised-button
+                  color="warn"
+                  style="background-color: #f44336 !important; color: white !important; margin: 10px;"
+                  (click)="testDownload('llama2:7b')">
+            <mat-icon>download</mat-icon>
+            Download Llama2 7B (TEST)
+          </button>
+          <button mat-raised-button
+                  color="warn"
+                  style="background-color: #f44336 !important; color: white !important; margin: 10px;"
+                  (click)="testDownload('codellama:7b')">
+            <mat-icon>download</mat-icon>
+            Download CodeLlama 7B (TEST)
+          </button>
+        </div>
+
+        <div class="models-grid" *ngIf="featuredModels.length > 0; else noFeaturedModels">
+          <mat-card class="model-card" *ngFor="let model of featuredModels">
+            <mat-card-header>
+              <div mat-card-avatar class="model-avatar">
+                <mat-icon [class]="'category-' + model.category.toLowerCase()">
+                  {{getModelIcon(model)}}
+                </mat-icon>
+              </div>
+              <mat-card-title>{{model.displayName}}</mat-card-title>
+              <mat-card-subtitle>{{model.publisher}}</mat-card-subtitle>
+              <div class="header-badges">
+                <mat-chip-set>
+                  <mat-chip *ngIf="model.isOfficial" color="primary">Official</mat-chip>
+                  <mat-chip>{{model.category}}</mat-chip>
+                </mat-chip-set>
+              </div>
+            </mat-card-header>
+
+            <mat-card-content>
+              <p class="model-description">{{model.shortDescription}}</p>
+              
+              <div class="model-stats">
+                <div class="stat-item">
+                  <mat-icon>download</mat-icon>
+                  <span>{{model.downloads.toLocaleString()}} downloads</span>
+                </div>
+                <div class="stat-item">
+                  <mat-icon>storage</mat-icon>
+                  <span>{{formatFileSize(model.size)}}</span>
+                </div>
+                <div class="stat-item">
+                  <mat-icon>update</mat-icon>
+                  <span>{{model.updatedAt | date:'short'}}</span>
+                </div>
+              </div>
+
+              <div class="model-capabilities" *ngIf="model.capabilities">
+                <mat-chip-set>
+                  <mat-chip *ngIf="model.capabilities.codeGeneration">Code Generation</mat-chip>
+                  <mat-chip *ngIf="model.capabilities.codeAnalysis">Code Analysis</mat-chip>
+                  <mat-chip *ngIf="model.capabilities.chat">Chat</mat-chip>
+                  <mat-chip *ngIf="model.capabilities.documentation">Documentation</mat-chip>
+                </mat-chip-set>
+              </div>
+
+              <!-- Download Progress -->
+              <div class="download-progress-inline" *ngIf="getDownloadProgress(model.name) as progress">
+                <div class="progress-info">
+                  <span class="progress-status">{{progress.status}}</span>
+                  <span class="progress-percentage">{{progress.progressPercentage.toFixed(1)}}%</span>
+                </div>
+                <mat-progress-bar 
+                  mode="determinate" 
+                  [value]="progress.progressPercentage"
+                  [color]="progress.hasError ? 'warn' : 'primary'">
+                </mat-progress-bar>
+              </div>
+            </mat-card-content>
+
+            <mat-card-actions>
+              <button mat-raised-button
+                      color="warn"
+                      style="background-color: #f44336 !important; color: white !important;"
+                      (click)="downloadModel(model)"
+                      [disabled]="isModelDownloading(model.name)"
+                      matTooltip="Download this model">
+                <mat-icon>download</mat-icon>
+                Download
+              </button>
+              
+              <button mat-button 
+                      color="accent"
+                      matTooltip="View model details">
+                <mat-icon>info</mat-icon>
+                Details
+              </button>
+
+              <button mat-button 
+                      *ngIf="model.variants.length > 1"
+                      matTooltip="View all variants">
+                <mat-icon>list</mat-icon>
+                Variants ({{model.variants.length}})
+              </button>
+            </mat-card-actions>
+          </mat-card>
+        </div>
+
+        <ng-template #noFeaturedModels>
+          <div class="empty-state">
+            <mat-icon>explore_off</mat-icon>
+            <h2>No Featured Models</h2>
+            <p>Featured models are currently unavailable. Try searching for specific models.</p>
+          </div>
+        </ng-template>
+      </div>
+    </mat-tab>
+
+    <!-- Search Results Tab -->
+    <mat-tab label="Search Results">
+      <div class="tab-content">
+        <!-- Loading State -->
+        <div class="loading-state" *ngIf="isLoading">
+          <mat-spinner diameter="50"></mat-spinner>
+          <p>Searching models...</p>
+        </div>
+
+        <!-- Search Results -->
+        <div class="search-results" *ngIf="!isLoading">
+          <div class="results-header">
+            <h3>
+              {{searchResults.totalCount}} models found
+              <span *ngIf="searchForm.get('query')?.value" class="search-query">
+                for "{{searchForm.get('query')?.value}}"
+              </span>
+            </h3>
+          </div>
+
+          <div class="models-grid" *ngIf="searchResults.models.length > 0; else noSearchResults">
+            <mat-card class="model-card" *ngFor="let model of searchResults.models">
+              <!-- Same card structure as featured models -->
+              <mat-card-header>
+                <div mat-card-avatar class="model-avatar">
+                  <mat-icon [class]="'category-' + model.category.toLowerCase()">
+                    {{getModelIcon(model)}}
+                  </mat-icon>
+                </div>
+                <mat-card-title>{{model.displayName}}</mat-card-title>
+                <mat-card-subtitle>{{model.publisher}}</mat-card-subtitle>
+                <div class="header-badges">
+                  <mat-chip-set>
+                    <mat-chip *ngIf="model.isOfficial" color="primary">Official</mat-chip>
+                    <mat-chip>{{model.category}}</mat-chip>
+                  </mat-chip-set>
+                </div>
+              </mat-card-header>
+
+              <mat-card-content>
+                <p class="model-description">{{model.shortDescription}}</p>
+                
+                <div class="model-stats">
+                  <div class="stat-item">
+                    <mat-icon>download</mat-icon>
+                    <span>{{model.downloads.toLocaleString()}} downloads</span>
+                  </div>
+                  <div class="stat-item">
+                    <mat-icon>storage</mat-icon>
+                    <span>{{formatFileSize(model.size)}}</span>
+                  </div>
+                </div>
+
+                <!-- Download Progress -->
+                <div class="download-progress-inline" *ngIf="getDownloadProgress(model.name) as progress">
+                  <div class="progress-info">
+                    <span class="progress-status">{{progress.status}}</span>
+                    <span class="progress-percentage">{{progress.progressPercentage.toFixed(1)}}%</span>
+                  </div>
+                  <mat-progress-bar 
+                    mode="determinate" 
+                    [value]="progress.progressPercentage"
+                    [color]="progress.hasError ? 'warn' : 'primary'">
+                  </mat-progress-bar>
+                </div>
+              </mat-card-content>
+
+              <mat-card-actions>
+                <button mat-raised-button
+                        color="warn"
+                        style="background-color: #f44336 !important; color: white !important;"
+                        (click)="downloadModel(model)"
+                        [disabled]="isModelDownloading(model.name)">
+                  <mat-icon>download</mat-icon>
+                  Download
+                </button>
+                
+                <button mat-button color="accent">
+                  <mat-icon>info</mat-icon>
+                  Details
+                </button>
+              </mat-card-actions>
+            </mat-card>
+          </div>
+
+          <!-- Pagination -->
+          <mat-paginator 
+            *ngIf="searchResults.totalCount > pageSize"
+            [length]="searchResults.totalCount"
+            [pageSize]="pageSize"
+            [pageIndex]="currentPage - 1"
+            [pageSizeOptions]="[10, 20, 50, 100]"
+            (page)="onPageChange($event)"
+            showFirstLastButtons>
+          </mat-paginator>
+
+          <ng-template #noSearchResults>
+            <div class="empty-state">
+              <mat-icon>search_off</mat-icon>
+              <h2>No Models Found</h2>
+              <p>Try adjusting your search criteria or browse featured models.</p>
+              <button mat-raised-button color="primary" (click)="clearSearch()">
+                Clear Search
+              </button>
+            </div>
+          </ng-template>
+        </div>
+      </div>
+    </mat-tab>
+  </mat-tab-group>
+</div>
