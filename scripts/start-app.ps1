@@ -8,13 +8,46 @@ Write-Host ""
 Write-Host "🔍 Checking Ollama service..." -ForegroundColor Yellow
 try {
     $ollamaResponse = Invoke-RestMethod -Uri "http://localhost:11434/api/tags" -Method GET -ErrorAction Stop
-    Write-Host "✅ Ollama is running" -ForegroundColor Green
+    Write-Host "✅ Ollama is already running" -ForegroundColor Green
 } catch {
-    Write-Host "❌ Ollama is not running on http://localhost:11434" -ForegroundColor Red
-    Write-Host "   Please start Ollama before running the application" -ForegroundColor Red
-    Write-Host ""
-    Read-Host "Press Enter to exit"
-    exit 1
+    Write-Host "🚀 Ollama not running - attempting to start automatically..." -ForegroundColor Yellow
+
+    # Try to start Ollama automatically
+    try {
+        $ollamaProcess = Start-Process "ollama" -ArgumentList "serve" -PassThru -WindowStyle Normal -ErrorAction Stop
+        Write-Host "✅ Ollama started (PID: $($ollamaProcess.Id))" -ForegroundColor Green
+
+        # Wait for Ollama to be ready
+        Write-Host "⏳ Waiting for Ollama to initialize..." -ForegroundColor Yellow
+        $attempts = 0
+        $maxAttempts = 15
+
+        do {
+            Start-Sleep -Seconds 2
+            $attempts++
+            try {
+                $testResponse = Invoke-RestMethod -Uri "http://localhost:11434/api/tags" -Method GET -TimeoutSec 3 -ErrorAction Stop
+                Write-Host "✅ Ollama is ready!" -ForegroundColor Green
+                break
+            } catch {
+                Write-Host "   Attempt $attempts/$maxAttempts..." -ForegroundColor Yellow
+            }
+        } while ($attempts -lt $maxAttempts)
+
+        if ($attempts -ge $maxAttempts) {
+            Write-Host "⚠️  Ollama started but not responding - continuing anyway..." -ForegroundColor Yellow
+        }
+
+    } catch {
+        Write-Host "❌ Failed to start Ollama automatically" -ForegroundColor Red
+        Write-Host "   Please install Ollama from https://ollama.ai or run OllamaSetup.exe" -ForegroundColor Red
+        Write-Host "   Then manually start it with: ollama serve" -ForegroundColor Red
+        Write-Host ""
+        $choice = Read-Host "Continue without Ollama? (y/N)"
+        if ($choice -ne "y" -and $choice -ne "Y") {
+            exit 1
+        }
+    }
 }
 
 Write-Host ""

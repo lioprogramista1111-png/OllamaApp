@@ -41,6 +41,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodeMentorAI.Core", "src\Co
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodeMentorAI.Infrastructure", "src\CodeMentorAI.Infrastructure\CodeMentorAI.Infrastructure.csproj", "{AF928A42-9D1B-48ED-8EB0-4FBF3ACDB3D8}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodeMentorAI.Tests", "src\CodeMentorAI.Tests\CodeMentorAI.Tests.csproj", "{B8C9D0E1-F2A3-4567-8901-234567890ABC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -59,8 +61,18 @@ Global
 		{AF928A42-9D1B-48ED-8EB0-4FBF3ACDB3D8}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AF928A42-9D1B-48ED-8EB0-4FBF3ACDB3D8}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AF928A42-9D1B-48ED-8EB0-4FBF3ACDB3D8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B8C9D0E1-F2A3-4567-8901-234567890ABC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B8C9D0E1-F2A3-4567-8901-234567890ABC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B8C9D0E1-F2A3-4567-8901-234567890ABC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B8C9D0E1-F2A3-4567-8901-234567890ABC}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890} = {76B4E188-B3E3-480B-A3A4-84EF85FF7DA2}
+		{7D3FCF5D-2EF1-48C8-AEAC-C45FD1C1C622} = {76B4E188-B3E3-480B-A3A4-84EF85FF7DA2}
+		{AF928A42-9D1B-48ED-8EB0-4FBF3ACDB3D8} = {76B4E188-B3E3-480B-A3A4-84EF85FF7DA2}
+		{B8C9D0E1-F2A3-4567-8901-234567890ABC} = {76B4E188-B3E3-480B-A3A4-84EF85FF7DA2}
 	EndGlobalSection
 EndGlobal

@@ -69,16 +69,19 @@ A comprehensive Angular + .NET Core application that provides intelligent code a
 
 ### Running the Application
 
-#### Option 1: Visual Studio (Recommended)
+#### Option 1: Visual Studio (Recommended) - Auto-Start Ollama
 
-1. Open `CodeMentorAI.sln` in Visual Studio 2022
-2. Press **F5** to start the backend
-3. Open a terminal and run:
+1. **Quick Start:** Double-click `START_OLLAMA.bat` to start Ollama first (optional)
+2. Open `CodeMentorAI.sln` in Visual Studio 2022
+3. Press **F5** to start the backend (Ollama will start automatically if not running)
+4. Open a terminal and run:
    ```bash
    cd src/CodeMentorAI.Web
    ng serve
    ```
-4. Open browser to `http://localhost:4200`
+5. Open browser to `http://localhost:4200`
+
+**✨ New: Ollama Auto-Start** - The backend now automatically starts Ollama if it's not running!
 
 **See [Quick Start Guide](docs/QUICKSTART_VISUAL_STUDIO.md) for detailed instructions.**
 

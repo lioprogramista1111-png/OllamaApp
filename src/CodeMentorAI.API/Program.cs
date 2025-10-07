@@ -73,6 +73,7 @@ builder.Services.AddScoped<IModelRegistryService, ModelRegistryService>();
 builder.Services.AddSingleton<IModelDownloadService, ModelDownloadService>();
 builder.Services.AddScoped<IModelCapabilityService, ModelCapabilityService>();
 builder.Services.AddSingleton<ModelDirectoryWatcher>();
+builder.Services.AddSingleton<OllamaStartupService>();
 
 // Add CORS
 builder.Services.AddCors(options =>
@@ -142,8 +143,48 @@ app.MapHub<ModelHub>("/modelhub");
 // Add health check endpoint
 app.MapGet("/health", () => "Healthy");
 
+// Ensure Ollama is running before starting the application
+var ollamaStartupService = app.Services.GetRequiredService<OllamaStartupService>();
+var logger = app.Services.GetRequiredService<ILogger<Program>>();
+
+logger.LogInformation("🚀 Starting CodeMentorAI - Checking Ollama status...");
+
+try
+{
+    var ollamaReady = await ollamaStartupService.EnsureOllamaIsRunningAsync();
+    if (ollamaReady)
+    {
+        logger.LogInformation("✅ Ollama is ready - CodeMentorAI can start normally");
+    }
+    else
+    {
+        logger.LogWarning("⚠️  Ollama is not running - Some features may not work");
+        logger.LogWarning("   Please start Ollama manually: ollama serve");
+    }
+}
+catch (Exception ex)
+{
+    logger.LogError(ex, "❌ Error checking Ollama status");
+    logger.LogWarning("   CodeMentorAI will start anyway, but AI features may not work");
+}
+
 // Start the file system watcher
 var watcher = app.Services.GetRequiredService<ModelDirectoryWatcher>();
 watcher.StartWatching();
+
+// Register cleanup on application shutdown
+var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+lifetime.ApplicationStopping.Register(() =>
+{
+    logger.LogInformation("🛑 Application shutting down...");
+    try
+    {
+        ollamaStartupService.StopOllama();
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Error during Ollama cleanup");
+    }
+});
 
 app.Run();

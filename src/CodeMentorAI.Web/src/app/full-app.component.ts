@@ -96,11 +96,6 @@ interface AvailableModel {
               <span class="nav-icon">🧠</span>
               <span>Model Management</span>
             </a>
-
-            <a class="nav-item" [class.active]="currentView === 'settings'" (click)="setView('settings')">
-              <span class="nav-icon">⚙️</span>
-              <span>Settings</span>
-            </a>
           </div>
         </div>
 
@@ -651,6 +646,15 @@ export class AppComponent implements OnInit, OnDestroy {
   setView(view: string) {
     this.currentView = view;
 
+    // Auto-select best model for Code Analysis
+    if (view === 'code-analysis') {
+      const qwenModel = this.availableModels.find(m => m.name.includes('qwen2.5-coder'));
+      if (qwenModel) {
+        this.selectedModel = qwenModel.name;
+        this.onModelChange();
+      }
+    }
+
     if (window.innerWidth <= 768) {
       this.sidenavOpen = false;
     }
@@ -661,8 +665,7 @@ export class AppComponent implements OnInit, OnDestroy {
       'code-analysis': '🔍 Code Analysis & Generation',
       'documentation': '📝 Documentation Generator',
       'model-download': '📥 Download Models',
-      'models': '🧠 Model Management',
-      'settings': '⚙️ Settings'
+      'models': '🧠 Model Management'
     };
     return titles[this.currentView] || 'Feature';
   }

@@ -112,7 +112,7 @@ interface AvailableModel {
             <div class="loading-content">
               <div class="loading-spinner"></div>
               <p>🤖 Ollama AI is analyzing your code...</p>
-              <small>Using real AI model - this may take a moment for large code snippets</small>
+              <small>Using local AI model - this may take a moment for large code snippets</small>
             </div>
           </div>
           
@@ -152,15 +152,7 @@ interface AvailableModel {
               </ul>
             </div>
 
-            <div class="quality-score" *ngIf="analysisResult.codeQuality && analysisResult.codeQuality > 0">
-              <h4>⭐ Code Quality Score</h4>
-              <div class="score-display">
-                <div class="score-bar">
-                  <div class="score-fill" [style.width.%]="analysisResult.codeQuality"></div>
-                </div>
-                <span class="score-text">{{ analysisResult.codeQuality }}/100</span>
-              </div>
-            </div>
+
           </div>
         </div>
       </div>
@@ -174,7 +166,7 @@ interface AvailableModel {
       min-height: calc(100vh - 48px);
       background: #f8f9fa;
       box-sizing: border-box;
-      overflow-y: auto;
+      overflow: visible;
     }
 
     .header {
@@ -201,7 +193,7 @@ interface AvailableModel {
       align-items: start;
       min-height: 600px;
       margin-bottom: 24px;
-      overflow: hidden;
+      overflow: visible;
       box-sizing: border-box;
     }
 
@@ -214,7 +206,7 @@ interface AvailableModel {
       min-height: 600px;
       display: flex;
       flex-direction: column;
-      overflow: hidden;
+      overflow: visible;
       box-sizing: border-box;
     }
 
@@ -292,10 +284,11 @@ interface AvailableModel {
       font-family: 'Courier New', monospace;
       font-size: 14px;
       line-height: 1.5;
-      resize: vertical;
+      resize: none;
       transition: border-color 0.3s;
       box-sizing: border-box;
       margin: 0;
+      overflow: hidden;
     }
 
     .code-textarea:focus {
@@ -551,7 +544,6 @@ export class CodeAnalysisComponent implements OnInit, OnDestroy {
   private readonly modelService = inject(ModelService);
   private readonly modelFormatter = inject(ModelFormatterService);
   private readonly destroy$ = new Subject<void>();
-  private readonly analysisCache = new Map<string, AnalysisResult>();
   private modelChangeListener: any;
 
   codeInput = '';
@@ -562,8 +554,8 @@ export class CodeAnalysisComponent implements OnInit, OnDestroy {
   displayedDetails = '';
 
   selectedFocus: string = 'codeQuality'; // Default to code quality
-  selectedModel = 'codellama:latest'; // Default to CodeLlama for code analysis
-  currentModelDisplayName = 'CodeLlama';
+  selectedModel = 'qwen2.5-coder:latest'; // Default to Qwen2.5-coder for code analysis
+  currentModelDisplayName = 'Qwen2.5-Coder';
   availableModels: AvailableModel[] = [
     { name: 'codellama:latest', displayName: 'CodeLlama', size: '3.8 GB' },
     { name: 'llama3.2:latest', displayName: 'Llama 3.2', size: '2.0 GB' },
@@ -675,9 +667,6 @@ export class CodeAnalysisComponent implements OnInit, OnDestroy {
   onModelChange() {
     this.currentModelDisplayName = this.getModelDisplayName();
     console.log('🔄 Model changed to:', this.selectedModel, '(' + this.currentModelDisplayName + ')');
-
-    // Clear cache when model changes since different models may give different results
-    this.analysisCache.clear();
     this.cdr.markForCheck();
   }
 
@@ -710,20 +699,6 @@ export class CodeAnalysisComponent implements OnInit, OnDestroy {
   async analyzeCode() {
     if (!this.codeInput.trim()) return;
 
-    // Create cache key for this analysis (without language since it's auto-detected)
-    const cacheKey = `${this.codeInput.slice(0, 100)}_${this.selectedFocus}`;
-
-    // Check cache first
-    if (this.analysisCache.has(cacheKey)) {
-      console.log('🚀 Cache hit! Using cached analysis result');
-      this.analysisResult = this.analysisCache.get(cacheKey)!;
-      // For cached results, show immediately without typing animation
-      this.displayedFeedback = this.analysisResult.feedback || '';
-      this.displayedDetails = this.analysisResult.details || '';
-      this.cdr.markForCheck();
-      return;
-    }
-
     this.isAnalyzing = true;
     this.analysisResult = null;
     this.displayedFeedback = '';
@@ -735,26 +710,21 @@ export class CodeAnalysisComponent implements OnInit, OnDestroy {
       console.log(`🎯 Focus: ${this.selectedFocus}`);
       console.log(`📄 Code length: ${this.codeInput.length} characters`);
 
-      // Convert single focus to options object for analysis
-      const options = {
-        codeQuality: this.selectedFocus === 'codeQuality',
-        performance: this.selectedFocus === 'performance',
-        security: this.selectedFocus === 'security',
-        bugs: this.selectedFocus === 'bugs',
-        refactoring: this.selectedFocus === 'refactoring',
-        explain: this.selectedFocus === 'explain'
-      };
+      console.log('🎯 Selected focus:', this.selectedFocus);
 
       // Call the backend API with real Ollama model using RxJS for better performance
       // Language is auto-detected by the backend
+      // Send the focus as a single string field for clearer backend processing
       const response = await this.http.post<AnalysisResult>('http://localhost:5000/api/codeanalysis', {
         code: this.codeInput,
         language: 'auto', // Backend will auto-detect the language
         model: this.selectedModel, // Use selected model
-        options: options
+        focus: this.selectedFocus // Send the focus type directly (explain, codeQuality, performance, security, bugs, refactoring)
       }).pipe(
         takeUntil(this.destroy$)
       ).toPromise();
+
+      console.log('📥 Received response:', response);
 
       if (response) {
         this.analysisResult = response;
@@ -768,15 +738,7 @@ export class CodeAnalysisComponent implements OnInit, OnDestroy {
           await this.typeText(response.feedback, 'feedback', 10);
         }
 
-        // Cache the result (limit cache size to prevent memory leaks)
-        if (this.analysisCache.size >= 50) {
-          const firstKey = this.analysisCache.keys().next().value;
-          this.analysisCache.delete(firstKey);
-        }
-        this.analysisCache.set(cacheKey, response);
-
         console.log('✅ Analysis completed successfully with model:', response.modelUsed);
-        console.log('📊 Quality Score:', response.codeQuality);
         console.log('💡 Suggestions:', response.suggestions?.length || 0);
       } else {
         throw new Error('No response received from backend');
@@ -800,7 +762,6 @@ export class CodeAnalysisComponent implements OnInit, OnDestroy {
             'Try pasting a complete code snippet with proper structure',
             'Examples: JavaScript functions, Python classes, C# methods, etc.'
           ],
-          codeQuality: 0,
           timestamp: new Date(),
           modelUsed: 'Validation Failed'
         };
@@ -815,7 +776,6 @@ export class CodeAnalysisComponent implements OnInit, OnDestroy {
             'Try refreshing the page and attempting again',
             'Check browser console for detailed error information'
           ],
-          codeQuality: 0,
           timestamp: new Date(),
           modelUsed: 'Error - No Model Available'
         };

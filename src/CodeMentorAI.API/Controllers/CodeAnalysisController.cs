@@ -53,18 +53,7 @@ public class CodeAnalysisController : ControllerBase
 
             _logger.LogInformation("✅ Code validation passed: {Type}", codeValidation.DetectedType);
 
-            _logger.LogInformation("Analysis focus areas: CodeQuality={CodeQuality}, Performance={Performance}, Security={Security}, Bugs={Bugs}, Refactoring={Refactoring}, Explain={Explain}",
-                request.Options.CodeQuality, request.Options.Performance, request.Options.Security, request.Options.Bugs, request.Options.Refactoring, request.Options.Explain);
-
-            // Log the single selected focus
-            var selectedFocus = request.Options.Explain ? "EXPLAIN CODE" :
-                               request.Options.CodeQuality ? "CODE QUALITY" :
-                               request.Options.Performance ? "PERFORMANCE" :
-                               request.Options.Security ? "SECURITY" :
-                               request.Options.Bugs ? "BUG DETECTION" :
-                               request.Options.Refactoring ? "REFACTORING" : "NONE";
-
-            _logger.LogInformation("🎯 SINGLE FOCUS SELECTED: {Focus}", selectedFocus);
+            _logger.LogInformation("🎯 Analysis Focus: {Focus}", request.Focus);
 
             // Use the model specified in the request, or get the best model for code analysis
             var bestModel = !string.IsNullOrEmpty(request.Model)
@@ -379,98 +368,102 @@ public class CodeAnalysisController : ControllerBase
 
     private string BuildAnalysisPrompt(CodeAnalysisRequest request, string detectedLanguage = null)
     {
-        // Determine the single focus area (since frontend now sends only one)
-        string selectedFocus = "";
-        string focusDescription = "";
-
-        if (request.Options.Explain)
-        {
-            // Special handling for Explain mode
-            var actualLanguage = !string.IsNullOrEmpty(detectedLanguage) && detectedLanguage != "unknown" ? detectedLanguage : request.Language;
-
-            return $@"You are a helpful code teacher. Explain the following {actualLanguage} code in detail.
-
-Please provide a clear, educational explanation that covers:
-1. **What the code does** - High-level purpose and functionality
-2. **How it works** - Step-by-step breakdown of the logic
-3. **Key concepts** - Important programming concepts used
-4. **Language features** - Specific {actualLanguage} features or syntax used
-
-Be thorough but clear. Use simple language suitable for learning.
-
-Code:
-```{actualLanguage}
-{request.Code}
-```
-
-Provide a detailed explanation:";
-        }
-        else if (request.Options.CodeQuality)
-        {
-            selectedFocus = "CODE QUALITY";
-            focusDescription = "code quality and best practices (naming conventions, code structure, readability, maintainability, SOLID principles)";
-        }
-        else if (request.Options.Performance)
-        {
-            selectedFocus = "PERFORMANCE";
-            focusDescription = "performance optimization (algorithm efficiency, memory usage, unnecessary operations, bottlenecks)";
-        }
-        else if (request.Options.Security)
-        {
-            selectedFocus = "SECURITY";
-            focusDescription = "security vulnerabilities (input validation, injection attacks, data exposure, authentication issues)";
-        }
-        else if (request.Options.Bugs)
-        {
-            selectedFocus = "BUG DETECTION";
-            focusDescription = "potential bugs and errors (null references, edge cases, logic errors, exception handling)";
-        }
-        else if (request.Options.Refactoring)
-        {
-            selectedFocus = "REFACTORING";
-            focusDescription = "refactoring opportunities (code duplication, long methods, complex conditionals, design patterns, method extraction, class responsibilities, SOLID violations, code smells, concrete refactoring steps with before/after examples)";
-        }
-
-        // Check for language mismatch
-        var languageWarning = "";
-        if (!string.IsNullOrEmpty(detectedLanguage) && detectedLanguage != "unknown" &&
-            !string.Equals(detectedLanguage, request.Language, StringComparison.OrdinalIgnoreCase))
-        {
-            languageWarning = $"\n\n⚠️ LANGUAGE MISMATCH WARNING: You selected '{request.Language}' but the code appears to be '{detectedLanguage}'. Please verify the language selection is correct.";
-        }
-
-        var focusText = !string.IsNullOrEmpty(selectedFocus)
-            ? $"🎯 SINGLE FOCUS ANALYSIS: {selectedFocus}\n\nANALYZE ONLY: {focusDescription}\n\nCOMPLETELY IGNORE: All other code aspects not related to {selectedFocus.ToLower()}. Be laser-focused ONLY on {selectedFocus.ToLower()} issues.{languageWarning}"
-            : $"Provide a general code quality analysis.{languageWarning}";
-
-        // Add specific refactoring instruction if refactoring is the focus
-        if (request.Options.Refactoring)
-        {
-            focusText += "\n\n🔧 REFACTORING REQUIRED: Provide a complete refactored code example fixing the issues found.";
-        }
-
         var actualLanguage = !string.IsNullOrEmpty(detectedLanguage) && detectedLanguage != "unknown" ? detectedLanguage : request.Language;
 
-        return $@"You are a specialized code reviewer with a SINGLE FOCUS. Analyze this {actualLanguage} code. BE EXTREMELY BRIEF.
+        // Use the Focus field to determine which prompt to use
+        switch (request.Focus?.ToLower())
+        {
+            case "explain":
+                return $@"Explain what this {actualLanguage} code does. Do NOT suggest improvements.
 
-{focusText}
+1. What is the purpose?
+2. How does it work step-by-step?
+3. What programming concepts are used?
 
-⚠️ CRITICAL: Only analyze the specified focus area above. Do NOT mention other code aspects.
+Code:
+```{actualLanguage}
+{request.Code}
+```";
 
-RESPONSE LIMIT: Maximum 150 words total. Be concise and focused.
+            case "codequality":
+                return $@"Analyze code quality ONLY. Ignore performance, security, and bugs.
 
-Format:
-**Issues**: 1-2 main {selectedFocus.ToLower()} problems only
-**Fix**: 1-2 key {selectedFocus.ToLower()} improvements
-**Code**: If refactoring focus, show fixed version (max 8 lines)
-**Score**: X/100 (based only on {selectedFocus.ToLower()})
+Check: naming, readability, structure, SOLID principles.
 
 Code:
 ```{actualLanguage}
 {request.Code}
 ```
 
-Focus ONLY on {selectedFocus.ToLower()}. Keep it SHORT.";
+Format (max 100 words):
+**Issues**: 1-2 quality problems
+**Fix**: How to improve";
+
+            case "performance":
+                return $@"Analyze performance ONLY. Ignore code quality, security, and bugs.
+
+Check: algorithm efficiency, memory usage, bottlenecks.
+
+Code:
+```{actualLanguage}
+{request.Code}
+```
+
+Format (max 100 words):
+**Issues**: 1-2 performance problems
+**Fix**: How to optimize";
+
+            case "security":
+                return $@"Analyze security ONLY. Ignore code quality, performance, and bugs.
+
+Check: input validation, injection attacks, data exposure, authentication.
+
+Code:
+```{actualLanguage}
+{request.Code}
+```
+
+Format (max 100 words):
+**Issues**: 1-2 security vulnerabilities
+**Fix**: How to secure";
+
+            case "bugs":
+                return $@"Find bugs ONLY. Ignore code quality, performance, and security.
+
+Check: null errors, edge cases, logic errors, exception handling.
+
+Code:
+```{actualLanguage}
+{request.Code}
+```
+
+Format (max 100 words):
+**Issues**: 1-2 potential bugs
+**Fix**: How to fix";
+
+            case "refactoring":
+                return $@"Suggest refactoring ONLY. Ignore performance, security, and bugs.
+
+Check: code duplication, long methods, complex conditionals, design patterns.
+
+Code:
+```{actualLanguage}
+{request.Code}
+```
+
+Format (max 150 words):
+**Issues**: 1-2 refactoring needs
+**Fix**: How to refactor
+**Refactored Code**: Show improved version (max 10 lines)";
+
+            default:
+                return $@"Analyze this {actualLanguage} code and provide feedback.
+
+Code:
+```{actualLanguage}
+{request.Code}
+```";
+        }
     }
 
     private CodeAnalysisResult ParseAnalysisResponse(string aiResponse, string language, string modelUsed, string detectedLanguage = null)
@@ -677,6 +670,7 @@ public class CodeAnalysisRequest
     public string Code { get; set; } = string.Empty;
     public string Language { get; set; } = string.Empty;
     public string? Model { get; set; } // Optional: specific model to use for analysis
+    public string Focus { get; set; } = "codeQuality"; // Single focus: codeQuality, performance, security, bugs, refactoring, explain
     public AnalysisOptions Options { get; set; } = new();
 }
 

@@ -36,9 +36,6 @@ import { OllamaModel } from './models/ollama.models';
         </button>
         <span class="app-title">CodeMentor AI</span>
         <span class="spacer"></span>
-        <button mat-icon-button>
-          <mat-icon>settings</mat-icon>
-        </button>
       </mat-toolbar>
 
       <mat-sidenav-container class="app-sidenav-container">
@@ -111,11 +108,6 @@ import { OllamaModel } from './models/ollama.models';
               <a mat-list-item routerLink="/performance" routerLinkActive="active" (click)="updateRouteState()">
                 <mat-icon matListItemIcon>analytics</mat-icon>
                 <span matListItemTitle>Performance</span>
-              </a>
-
-              <a mat-list-item routerLink="/settings" routerLinkActive="active" (click)="updateRouteState()">
-                <mat-icon matListItemIcon>settings</mat-icon>
-                <span matListItemTitle>Settings</span>
               </a>
             </mat-nav-list>
           </div>
